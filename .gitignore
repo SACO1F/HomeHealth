@@ -36,3 +36,7 @@ release/*
 *.visual-check.json
 *.visual-check.html
 *.visual-check.*.png
+
+# 品牌/商店素材：本地保留即可，不参与构建也无人引用，不必进公开仓库
+app/HomeHealthLogo.png
+app/src/main/ic_launcher-playstore.png
