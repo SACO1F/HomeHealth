@@ -3,6 +3,20 @@
     <string name="channel_medication">Medication Reminders</string>
     <string name="channel_health">Health Alerts</string>
 
+    <!-- First-run privacy &amp; disclaimer consent (versioned by SettingsPrefs.CONSENT_VERSION_CURRENT) -->
+    <string name="consent_title">Privacy &amp; disclaimer</string>
+    <string name="consent_intro">Before you start, please read how this app handles your data.</string>
+    <string name="consent_local_title">Your data stays on this phone</string>
+    <string name="consent_local_body">All health records (family members, metrics, report images, Q&amp;A history, medication reminders) are stored in this app\'s private storage. There is no developer server — nothing is ever sent back to the developer.</string>
+    <string name="consent_network_title">When the app goes online</string>
+    <string name="consent_network_body">Only after you enable \"Report parsing\" or \"Health Q&amp;A\" and enter your own API key are the relevant records sent to the model provider you chose (Zhipu, OpenAI, DeepSeek, etc.). In \"Local mode\" the app never goes online. API keys are stored encrypted on this device only.</string>
+    <string name="consent_uninstall_title">Uninstalling deletes everything</string>
+    <string name="consent_uninstall_body">System backup is disabled (allowBackup=false). Uninstalling the app, clearing its data or switching phones keeps and migrates nothing — and it cannot be recovered.</string>
+    <string name="consent_medical_title">Not medical advice</string>
+    <string name="consent_medical_body">Alerts and AI answers are generated automatically by the program from your saved data, for reference only, and cannot replace a doctor\'s diagnosis. Follow your doctor\'s advice on medication and treatment; seek medical care promptly if you feel unwell.</string>
+    <string name="consent_accept">Agree and continue</string>
+    <string name="consent_decline">Decline and exit</string>
+
     <!-- Common -->
     <string name="common_save">Save</string>
     <string name="common_cancel">Cancel</string>

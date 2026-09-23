@@ -28,6 +28,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.navigation.compose.rememberNavController
 import com.example.homehealth.data.SettingsPrefs
 import com.example.homehealth.ui.navigation.RootApp
+import com.example.homehealth.ui.screens.consent.ConsentScreen
 import com.example.homehealth.ui.theme.HomeHealthTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -64,9 +65,23 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             HomeHealthTheme(darkTheme = darkTheme) {
-                val navController = rememberNavController()
-                RequestNotificationPermissionOnce()
-                RootApp(navController = navController, darkTheme = darkTheme)
+                // 首启必须主动同意「隐私与免责说明」：未同意时不进入主界面，也不申请任何权限
+                // （把权限申请也挡在同意之前 —— 先要权限再给说明，顺序是反的）
+                var consented by remember { mutableStateOf(settingsPrefs.hasAcceptedConsent) }
+                if (consented) {
+                    val navController = rememberNavController()
+                    RequestNotificationPermissionOnce()
+                    RootApp(navController = navController, darkTheme = darkTheme)
+                } else {
+                    ConsentScreen(
+                        onAccept = {
+                            settingsPrefs.acceptConsent()
+                            consented = true
+                        },
+                        // 不同意即退出：SplashActivity 已出栈，finish 后应用关闭
+                        onDecline = { finish() }
+                    )
+                }
             }
         }
     }

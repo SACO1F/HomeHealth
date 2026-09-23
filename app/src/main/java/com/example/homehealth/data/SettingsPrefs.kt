@@ -46,6 +46,24 @@ class SettingsPrefs @Inject constructor(@ApplicationContext context: Context) {
         get() = sp.getString(KEY_LANGUAGE_MODE, LANGUAGE_SYSTEM) ?: LANGUAGE_SYSTEM
         set(value) = sp.edit().putString(KEY_LANGUAGE_MODE, value).apply()
 
+    // ---- 首启「隐私与免责」同意 ----
+
+    /**
+     * 已同意的说明版本号。
+     *
+     * 用版本号而不是布尔值：说明内容发生实质变化（数据去向、免责范围）时必须递增
+     * [CONSENT_VERSION_CURRENT]，老用户才会重新看到并再次同意 —— 否则改了文案却
+     * 没有任何人再读过，等于没改。
+     */
+    val consentVersion: Int get() = sp.getInt(KEY_CONSENT_VERSION, 0)
+
+    /** 是否已就当前版本的说明取得同意 */
+    val hasAcceptedConsent: Boolean get() = consentVersion >= CONSENT_VERSION_CURRENT
+
+    /** 记录同意。只写本地标记，不上报任何地方 */
+    fun acceptConsent() =
+        sp.edit().putInt(KEY_CONSENT_VERSION, CONSENT_VERSION_CURRENT).apply()
+
     // ---- 报告解析服务 ----
 
     /** 解析供应商：local / zhipu / openai / gemini / deepseek / kimi / qwen / anthropic */
@@ -187,6 +205,14 @@ class SettingsPrefs @Inject constructor(@ApplicationContext context: Context) {
         const val LANGUAGE_SYSTEM = "system"
         const val LANGUAGE_ZH = "zh"
         const val LANGUAGE_EN = "en"
+
+        /**
+         * 隐私与免责说明的当前版本。**文案有实质变更时必须 +1**：
+         * 老用户的已同意版本号低于它，就会重新看到首启那一屏并需再次同意。
+         */
+        const val CONSENT_VERSION_CURRENT = 1
+
+        private const val KEY_CONSENT_VERSION = "consent_version"
 
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_LANGUAGE_MODE = "language_mode"
