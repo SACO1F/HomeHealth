@@ -1,6 +1,10 @@
 *.iml
 .gradle/
 local.properties
+# 正式签名凭据：引用仓库外的密钥库，绝不入库
+keystore.properties
+*.jks
+*.keystore
 .idea/
 .DS_Store
 build/
