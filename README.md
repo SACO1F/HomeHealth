@@ -297,6 +297,11 @@ app/src/main/java/com/example/homehealth/
 
 Design brief (pre-implementation, Chinese) — 实现前设计蓝图，与最终实现存在差异: [docs/开发文档.md](./docs/开发文档.md)
 
+Interactive architecture diagrams — self-contained HTML, click to open directly on GitHub — 可交互架构图（单文件 HTML，在 GitHub 上直接点开即可）:
+
+- [01 · Module architecture | 模块结构](./docs/diagrams/01-module-architecture.html)
+- [02 · ReAct agent loop | ReAct 循环](./docs/diagrams/02-agent-react-loop.html)
+
 ## 🗺️ Roadmap
 
 Q&A today is streaming keyword retrieval (BM25) over personal records — no chunking, embedding or vector retrieval yet. The evolution path, one step at a time:
