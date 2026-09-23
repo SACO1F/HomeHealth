@@ -24,13 +24,13 @@
 
 HomeHealth is a local-first, privacy-focused family health manager for Android. Snap a photo of a lab report or health checkup sheet, and a **Vision LLM** extracts 49 types of structured health metrics in JSON mode — complete blood count, glucose, lipids, liver & kidney function, vitamins and more. A **Schema Normalization** layer then maps 106 metric aliases to a standard dictionary, unifies 24 unit spellings, and applies 24 clinically reliable unit conversions before anything reaches the database. Every family member gets an independent health profile with three-rule anomaly detection (reference ranges / trend windows / personal baseline), streaming record-grounded Q&A with cited source records — open-ended questions are handled by a hand-written **ReAct agent** over four read-only health-data tools — and medication reminders synced with the system calendar. Every LLM call is logged locally (latency / retries / failure type — never the prompt content). The UI is fully bilingual (English / 中文).
 
-> 🔐 **Local-first, privacy first**: all health data lives in an on-device Room database and is never uploaded anywhere; API keys are AES-256-GCM encrypted with Android Keystore; the app is fully usable without configuring any LLM (a built-in offline Q&A engine covers the basics).
+> 🔐 **Local-first, privacy first**: all health data lives in an on-device Room database, and the app talks to **no server of mine**. Data leaves the phone only when you explicitly trigger report parsing or Q&A — and then it goes **directly to the LLM provider you configured yourself**, authenticated with your own API key. API keys are AES-256-GCM encrypted with Android Keystore; the app is fully usable without configuring any LLM (a built-in offline Q&A engine covers the basics).
 
 **中文**
 
 HomeHealth 面向多成员家庭，是一款本地优先、隐私至上的 Android 健康管理应用。只需拍照或上传体检报告、化验单，**Vision 大模型**即可通过 JSON 模式自动提取 49 类结构化健康指标（血常规、血糖血脂、肝肾功能、维生素等）。入库前，**Schema 归一化**层会把 106 条指标别名映射到标准字典、统一 24 种单位写法、执行 24 类医学上可靠的跨单位换算。每位家庭成员拥有独立健康档案，异常检测由三条规则组成（参考范围 / 趋势时间窗 / 个体基线），另有流式、可溯源到个人记录的健康问答——泛化问题交给一个手写的 **ReAct Agent**（4 个只读健康数据工具）——以及与系统日历联动的用药提醒。每次 LLM 调用都在本地留有观测日志（耗时 / 重试 / 失败类型——不含提示词内容）。界面已全面支持中英双语。
 
-> 🔐 **本地优先，隐私至上**：所有健康数据以 Room 数据库存储在设备本地，不上传任何第三方服务器；API Key 经 Android Keystore AES-256-GCM 加密后保存；不配置任何 LLM 也完全可用（内置离线问答引擎兜底）。
+> 🔐 **本地优先，隐私至上**：所有健康数据以 Room 数据库存储在设备本地，应用**不经过任何属于开发者的服务器**。数据只在你主动触发报告解析或问答时离开手机，且**直连你自己配置的大模型服务商**、用你自己的 API Key 认证。API Key 经 Android Keystore AES-256-GCM 加密后保存；不配置任何 LLM 也完全可用（内置离线问答引擎兜底）。
 
 ## 🔄 Core Pipeline | 核心流程
 
@@ -97,9 +97,9 @@ HomeHealth 面向多成员家庭，是一款本地优先、隐私至上的 Andro
 
 ### 6. 🔐 Truly local-first | 真正的本地优先
 
-**EN**: Health data and Q&A history live only in the on-device Room database. API keys are encrypted with **Android Keystore (AES-256-GCM)** — key material never leaves the TEE, and legacy plaintext keys are migrated in place. Android backup is disabled (`allowBackup="false"`), so none of it can be pulled out via `adb backup` or cloud backup. The LLM receives only the per-request summary when you explicitly trigger parsing or asking — no background data upload whatsoever. Fully usable without a key: an offline rule engine answers basic questions.
+**EN**: Health data and Q&A history live only in the on-device Room database. API keys are encrypted with **Android Keystore (AES-256-GCM)** — key material never leaves the TEE, and legacy plaintext keys are migrated in place. Android backup is disabled (`allowBackup="false"`), so none of it can be pulled out via `adb backup` or cloud backup. When you explicitly trigger parsing or asking, the request goes **straight to the provider you configured, authenticated with your own API key** — nothing is relayed through a server of mine, and there is no background upload whatsoever. Without a key the app stays fully offline: a local rule engine answers basic questions.
 
-**中文**：健康数据与问答历史仅存于设备 Room 数据库。API Key 经 **Android Keystore（AES-256-GCM）**加密存储——密钥材料不出 TEE，历史明文 Key 会就地平滑迁移。已关闭 Android 备份（`allowBackup="false"`），无法通过 `adb backup` 或云备份取出。LLM 只在你主动触发解析/提问时收到**当次请求**所需的摘要，无任何后台数据上报。不配 Key 也完整可用——离线规则引擎兜底问答。
+**中文**：健康数据与问答历史仅存于设备 Room 数据库。API Key 经 **Android Keystore（AES-256-GCM）**加密存储——密钥材料不出 TEE，历史明文 Key 会就地平滑迁移。已关闭 Android 备份（`allowBackup="false"`），无法通过 `adb backup` 或云备份取出。你主动触发解析/提问时，请求会**直连你自己配置的服务商、用你自己的 API Key 认证**——不经过开发者服务器，也没有任何后台数据上报。不配 Key 时应用完全离线，由本地规则引擎兜底问答。
 
 ### 7. 🌍 Bilingual alerts + UI | 双语告警与界面
 
@@ -118,6 +118,12 @@ HomeHealth 面向多成员家庭，是一款本地优先、隐私至上的 Andro
 **EN**: Health Q&A streams over SSE — the answer appears token by token instead of after the whole generation. Before the first token even arrives, the app has already shown the **data basis**: which saved records the answer draws on, with reference ranges and high/low flags — so the user sees what the answer stands on *before* reading it. On the keyword-retrieval path every record carries an `[n]` id and the model is instructed to cite it inline, making every figure in the answer traceable to a specific record. General questions that don't point at a metric get a data-scope summary instead (how many records, which metrics) — the basis block is never empty. Report parsing deliberately stays non-streaming: it needs the complete JSON object before anything can be saved.
 
 **中文**：健康问答走 SSE 流式——回答逐字上屏，而不是等整段生成完。**在首个 token 到达之前，界面已经先给出数据依据**：本次回答基于哪些已保存记录（带参考范围与偏高/偏低标注），用户在读到结论前就知道它站在什么之上。走检索路径时每条记录带 `[n]` 编号，并要求模型在数值后内联标注编号，答案里的每个数字都能追溯到具体记录；不指向具体指标的泛化问题则给出数据范围（多少条记录、覆盖哪些指标），依据块永不为空。报告解析刻意保持非流式——它需要完整的 JSON 对象才能入库。
+
+### 10. 📜 First-run consent, not a buried notice | 首启主动同意，而非埋一段文字
+
+**EN**: Consent for how health data is handled is obtained **before a single record can be entered** — a full-screen, scrollable notice covering four things: where the data lives (this phone; there is no developer server), when it leaves the device (only once you enable a provider and enter your own API key), what uninstalling does (deletes everything; system backup is disabled), and the medical disclaimer. Declining exits the app, and notification permission is only requested *after* consent. The notice is **versioned**: change the text materially, bump the version, and every existing user sees it again. Health records are sensitive personal information — a paragraph buried in Settings is not consent.
+
+**中文**：对「数据怎么被处理」的同意，是在**能录入任何一条记录之前**取得的——一屏可滚动的说明，覆盖四件事：数据存在哪（本机，没有开发者服务器）、什么时候离开设备（只有你启用供应商并填自己的 Key 之后）、卸载会发生什么（全部删除，系统备份已关闭）、以及医疗免责声明。不同意即退出应用，且通知权限在同意**之后**才申请。说明带**版本号**：文案有实质变更就递增版本，所有老用户会重新看到并再次同意。健康记录属于敏感个人信息——在设置页里埋一段文字不构成同意。
 
 ## ✨ Feature Overview | 功能全景
 
@@ -252,6 +258,27 @@ gradlew.bat assembleDebug
 > 🔧 **构建环境说明**：源码兼容级别是 JDK 17，但 Gradle **daemon** 的 JVM 由 `gradle/gradle-daemon-jvm.properties` 指定（参考环境下为 JDK 25）。该文件已加入 `.gitignore`，每台机器保留自己的工具链；因此从命令行构建时需要把 `JAVA_HOME` 指向匹配的 JDK。
 
 > 💡 **开箱即用**：不配置任何 LLM Key 也能使用家庭档案、手动记录、趋势图、预警、用药提醒和离线健康问答；在「设置 → 报告解析服务 / 健康问答服务」中填入任意供应商的 API Key 后，即可解锁拍照解析报告和 AI 问答。
+
+> 🔑 **Release signing | 正式签名与分发**
+>
+> Debug builds are signed with the shared debug keystore and carry `android:debuggable="true"` — fine for local testing, **not for distribution**. To produce a distributable build, create your own keystore and point a gitignored `keystore.properties` (repo root) at it:
+>
+> ```bash
+> keytool -genkeypair -keystore keystore/homehealth-release.jks -alias homehealth \
+>     -keyalg RSA -keysize 4096 -validity 10000
+> ```
+>
+> ```properties
+> # keystore.properties — repo root, gitignored
+> storeFile=keystore/homehealth-release.jks
+> storePassword=…
+> keyAlias=homehealth
+> keyPassword=…
+> ```
+>
+> then `gradlew.bat assembleRelease`. Both `keystore.properties` and the `keystore/` folder are gitignored — verify with `git check-ignore -v keystore.properties keystore/homehealth-release.jks` before your first commit. When the file is absent the release variant is simply left unsigned, so a fresh clone still builds. **Keep an offline backup of the keystore** — losing it means you can never update an installed copy again (users would have to uninstall, losing all local data).
+>
+> 调试包由公共调试证书签名并带 `android:debuggable="true"`，适合本机测试，**不可用于分发**。要出可分发版本，请自建密钥库，并用仓库根目录的 `keystore.properties`（**已 gitignore**）指向它，然后 `gradlew.bat assembleRelease`。`keystore.properties` 与 `keystore/` 目录都在 `.gitignore` 内——首次提交前用 `git check-ignore -v keystore.properties keystore/homehealth-release.jks` 确认一下。该文件不存在时 release 变体不签名，因此他人 clone 后仍可正常构建。**请离线备份密钥库**——丢了就永远无法再更新已安装的版本（用户只能卸载重装，本地数据全丢）。
 
 ## 📁 Project Structure | 项目结构
 
