@@ -129,6 +129,8 @@ class DetectAnomaliesUseCase @Inject constructor(
         gender: String?,
         create: suspend (AlertFacts, String, String, AlertSeverity) -> Unit
     ) {
+        // 未换算的单位不能拿标准参考区间比较，否则会产生虚假的健康预警。
+        if (SchemaNormalizer.normalizeUnit(record.unit) != HealthTypes.unit(metric)) return
         val dateStr = com.example.homehealth.util.DateUtils.formatDate(record.recordDate)
 
         // 血压特殊：收缩压/舒张压分别判断
@@ -230,6 +232,8 @@ class DetectAnomaliesUseCase @Inject constructor(
         create: suspend (AlertFacts, String, String, AlertSeverity) -> Unit
     ) {
         val threshold = HealthTypes.TREND_THRESHOLDS[metric] ?: return
+        if (asc.any { it.comparator != null ||
+                SchemaNormalizer.normalizeUnit(it.unit) != HealthTypes.unit(metric) }) return
         val nums = asc.mapNotNull { it.numericValue }
         if (nums.size < 3) return
 
@@ -256,7 +260,7 @@ class DetectAnomaliesUseCase @Inject constructor(
                     valueText = "${nums[0]} → ${nums[2]}",
                     unitText = unit,
                     refText = null,
-                    spanText = spanText
+                    spanText = if (spanDays <= 0) "same_day" else "days:$spanDays"
                 ),
                 "$label 呈持续上升趋势",
                 "$from 至 $to（$spanText）期间，$label 从 ${nums[0]} 升至 ${nums[2]} $unit（累计上升 ${"%.1f".format(totalDelta)} $unit），请关注变化趋势",
@@ -270,7 +274,7 @@ class DetectAnomaliesUseCase @Inject constructor(
                     valueText = "${nums[0]} → ${nums[2]}",
                     unitText = unit,
                     refText = null,
-                    spanText = spanText
+                    spanText = if (spanDays <= 0) "same_day" else "days:$spanDays"
                 ),
                 "$label 呈持续下降趋势",
                 "$from 至 $to（$spanText）期间，$label 从 ${nums[0]} 降至 ${nums[2]} $unit（累计下降 ${"%.1f".format(abs(totalDelta))} $unit），请关注变化趋势",
@@ -296,9 +300,14 @@ class DetectAnomaliesUseCase @Inject constructor(
     ) {
         val threshold = HealthTypes.TREND_THRESHOLDS[metric] ?: return
         val latest = recentDesc.firstOrNull() ?: return
+        if (latest.comparator != null ||
+            SchemaNormalizer.normalizeUnit(latest.unit) != HealthTypes.unit(metric)) return
         val current = latest.numericValue ?: return
         // 至少要有足够历史才谈得上"基线"，否则等于拿两三个点硬编一个基准出来
-        val history = recentDesc.drop(1).mapNotNull { it.numericValue }
+        val history = recentDesc.drop(1)
+            .filter { it.comparator == null &&
+                SchemaNormalizer.normalizeUnit(it.unit) == HealthTypes.unit(metric) }
+            .mapNotNull { it.numericValue }
         if (history.size < DetectionConfig.BASELINE_MIN_SAMPLES) return
 
         val baseline = median(history)

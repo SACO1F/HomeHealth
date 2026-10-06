@@ -58,7 +58,7 @@ fun RecordDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val memberGender by viewModel.memberGender.collectAsStateWithLifecycle()
-    val label = stringResource(HealthTypes.labelRes(viewModel.type))
+    val label = com.example.homehealth.ui.components.metricLabel(viewModel.type)
     var showAddDialog by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<HealthRecord?>(null) }
     var deleteTarget by remember { mutableStateOf<HealthRecord?>(null) }

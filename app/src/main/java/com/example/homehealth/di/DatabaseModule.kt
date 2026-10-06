@@ -24,7 +24,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-    // 四个迁移对 androidTest 开放（测试必须用真实的迁移对象，用副本测试没有意义）
+    // 迁移对象对 androidTest 开放（测试必须用真实对象，用副本测试没有意义）
 
     /** v1 → v2：family_members 新增身高、体重列（保留已有数据） */
     val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -103,13 +103,27 @@ object DatabaseModule {
         }
     }
 
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            AppMigrationSql.V8_TO_V9.forEach(db::execSQL)
+        }
+    }
+
+    /** v9 → v10：family_members 新增健康档案 8 列（可空，见 AppMigrationSql.V9_TO_V10） */
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            AppMigrationSql.V9_TO_V10.forEach(db::execSQL)
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "homehealth.db")
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-                MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+                MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
+                MIGRATION_8_9, MIGRATION_9_10
             )
             // 不使用 fallbackToDestructiveMigration()：版本跳变或缺失迁移时宁可直接启动失败，
             // 也不能静默清空用户数据（与下方"渐进式迁移保留数据"的定位一致）。

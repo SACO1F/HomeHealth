@@ -1,7 +1,7 @@
 package com.example.homehealth.data.local
 
 /**
- * v4 → v8 迁移 SQL 的单一事实来源。
+ * v4 → v9 迁移 SQL 的单一事实来源。
  *
  * **为什么要抽出来**：Migration 对象只能在设备 / instrumentation 环境里执行，
  * SQL 字符串埋在 `migrate()` 方法体内，JVM 单测拿不到——结构级校验过去只能靠
@@ -64,5 +64,27 @@ object AppMigrationSql {
      */
     val V7_TO_V8: List<String> = listOf(
         "ALTER TABLE qa_history ADD COLUMN imagePath TEXT"
+    )
+
+    /** v8 → v9：保留报告解析原文及每条记录的归一化说明。 */
+    val V8_TO_V9: List<String> = listOf(
+        "ALTER TABLE medical_documents ADD COLUMN rawText TEXT",
+        "ALTER TABLE medical_documents ADD COLUMN normalizationNotesJson TEXT"
+    )
+
+    /**
+     * v9 → v10：family_members 新增健康档案 8 列（血型 / 腰围 / 运动 / 饮食 /
+     * 吸烟 / 饮酒 / 慢性病史 / 手术史），全部可空，历史成员天然为「未填写」。
+     * 这些信息只在健康问答拼上下文与成员详情展示时读取，不参与异常检测。
+     */
+    val V9_TO_V10: List<String> = listOf(
+        "ALTER TABLE family_members ADD COLUMN bloodType TEXT",
+        "ALTER TABLE family_members ADD COLUMN waistCm REAL",
+        "ALTER TABLE family_members ADD COLUMN exercise TEXT",
+        "ALTER TABLE family_members ADD COLUMN diet TEXT",
+        "ALTER TABLE family_members ADD COLUMN smoking TEXT",
+        "ALTER TABLE family_members ADD COLUMN drinking TEXT",
+        "ALTER TABLE family_members ADD COLUMN chronicConditions TEXT",
+        "ALTER TABLE family_members ADD COLUMN surgeryHistory TEXT"
     )
 }

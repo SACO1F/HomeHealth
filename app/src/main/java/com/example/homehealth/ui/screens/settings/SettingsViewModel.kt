@@ -13,6 +13,8 @@ import com.example.homehealth.data.local.entity.HealthRecord
 import com.example.homehealth.data.local.entity.MedicationReminder
 import com.example.homehealth.data.local.entity.MedicalDocument
 import com.example.homehealth.data.local.entity.QAHistory
+import com.example.homehealth.ui.components.MemberHealthInfo
+import com.example.homehealth.ui.components.withHealthInfo
 import com.example.homehealth.domain.repository.AlertRepository
 import com.example.homehealth.domain.repository.DocumentRepository
 import com.example.homehealth.domain.repository.FamilyRepository
@@ -199,7 +201,8 @@ class SettingsViewModel @Inject constructor(
         gender: String?,
         heightCm: Double?,
         weightKg: Double?,
-        avatarUrl: String? = null
+        avatarUrl: String? = null,
+        health: MemberHealthInfo = MemberHealthInfo()
     ) {
         viewModelScope.launch {
             familyRepository.upsertMember(
@@ -211,7 +214,15 @@ class SettingsViewModel @Inject constructor(
                     dateOfBirth = dob,
                     gender = gender,
                     heightCm = heightCm,
-                    weightKg = weightKg
+                    weightKg = weightKg,
+                    bloodType = health.bloodType,
+                    waistCm = health.waistCm,
+                    exercise = health.exercise,
+                    diet = health.diet,
+                    smoking = health.smoking,
+                    drinking = health.drinking,
+                    chronicConditions = health.chronicConditions,
+                    surgeryHistory = health.surgeryHistory
                 )
             )
         }
@@ -225,7 +236,8 @@ class SettingsViewModel @Inject constructor(
         gender: String?,
         heightCm: Double?,
         weightKg: Double?,
-        avatarUrl: String? = null
+        avatarUrl: String? = null,
+        health: MemberHealthInfo = MemberHealthInfo()
     ) {
         viewModelScope.launch {
             // 头像被替换或清除时删除旧头像文件
@@ -233,7 +245,7 @@ class SettingsViewModel @Inject constructor(
                 runCatching { File(existing.avatarUrl).delete() }
             }
             familyRepository.upsertMember(
-                existing.copy(
+                existing.withHealthInfo(health).copy(
                     name = name,
                     relationship = relationship,
                     avatarUrl = avatarUrl,

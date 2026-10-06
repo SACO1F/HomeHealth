@@ -83,8 +83,8 @@ fun RecordInputDialog(
         title = {
             Text(
                 when {
-                    isEdit -> stringResource(R.string.record_edit_title, stringResource(HealthTypes.labelRes(selectedType)))
-                    typeLocked -> stringResource(R.string.record_add_typed_title, stringResource(HealthTypes.labelRes(selectedType)))
+                    isEdit -> stringResource(R.string.record_edit_title, metricLabel(selectedType))
+                    typeLocked -> stringResource(R.string.record_add_typed_title, metricLabel(selectedType))
                     else -> stringResource(R.string.record_add_generic_title)
                 }
             )
@@ -93,10 +93,10 @@ fun RecordInputDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // 未锁定类型时可选指标（49 项标准指标体系）
                 if (!typeLocked) {
-                    val typeOptions = HealthTypes.ALL.map { it to stringResource(HealthTypes.labelRes(it)) }
+                    val typeOptions = HealthTypes.ALL.map { it to metricLabel(it) }
                     DropdownSelector(
                         options = typeOptions.map { it.second },
-                        selected = stringResource(HealthTypes.labelRes(selectedType)),
+                        selected = metricLabel(selectedType),
                         label = stringResource(R.string.record_type_label),
                         onSelect = { label ->
                             selectedType = typeOptions.first { it.second == label }.first

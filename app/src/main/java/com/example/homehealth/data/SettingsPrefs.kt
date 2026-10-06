@@ -106,7 +106,7 @@ class SettingsPrefs @Inject constructor(@ApplicationContext context: Context) {
     // ---- 密钥读写（Keystore 加密 + 历史明文平滑迁移）----
 
     /** 存在密文但解不开的密钥槽（Keystore 失效时置入），用于给出准确的提示而不是「未填写」 */
-    private val unreadableKeys = mutableSetOf<String>()
+    private val unreadableKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     /** 解析服务密钥是否存在「已保存但无法解密」的状态 */
     val parseKeyUnreadable: Boolean get() = KEY_PARSE_KEY in unreadableKeys

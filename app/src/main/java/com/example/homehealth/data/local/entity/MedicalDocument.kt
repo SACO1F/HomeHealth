@@ -14,5 +14,9 @@ data class MedicalDocument(
     val documentType: String? = null, // 如 "lab_report", "prescription", "discharge_summary"
     val parseStatus: ParseStatus = ParseStatus.PENDING, // PENDING, PROCESSING, COMPLETED, FAILED
     val extractedJson: String? = null, // 解析出的结构化数据 JSON
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /** 模型原始解析文本，便于复核漏识别的项目。 */
+    val rawText: String? = null,
+    /** 记录 ID 到单位归一化说明的 JSON 映射。 */
+    val normalizationNotesJson: String? = null
 )

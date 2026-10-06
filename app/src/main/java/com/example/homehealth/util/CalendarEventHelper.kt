@@ -3,9 +3,12 @@ package com.example.homehealth.util
 import android.content.ContentValues
 import android.content.Context
 import android.provider.CalendarContract
+import com.example.homehealth.R
 import java.util.Calendar
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
+import java.io.IOException
+import com.example.homehealth.data.local.entity.MedicationReminder
 
 /**
  * 本地日历接入：把用药提醒写入系统日历（每日重复事件 + 提前提醒）。
@@ -46,7 +49,8 @@ object CalendarEventHelper {
         medicationName: String,
         dosage: String,
         memberName: String,
-        times: List<String>
+        times: List<String>,
+        reminderId: String
     ): List<Long> {
         val calendarId = firstWritableCalendarId(context)
             ?: throw IllegalStateException("设备上没有可写的日历账户")
@@ -54,7 +58,8 @@ object CalendarEventHelper {
         val eventIds = mutableListOf<Long>()
         val now = System.currentTimeMillis()
 
-        times.filter { it.matches(Regex("\\d{1,2}:\\d{2}")) }.forEach { time ->
+        try {
+        times.filter(MedicationReminder::isValidTime).forEach { time ->
             val (hour, minute) = time.split(":").map { it.toInt() }
             // 下一次该时刻出现的时间（今天已过则从明天开始）
             val start = Calendar.getInstance().apply {
@@ -68,10 +73,12 @@ object CalendarEventHelper {
 
             val values = ContentValues().apply {
                 put(CalendarContract.Events.CALENDAR_ID, calendarId)
-                put(CalendarContract.Events.TITLE, "服药：$medicationName")
+                put(CalendarContract.Events.TITLE,
+                    context.getString(R.string.calendar_medication_title, medicationName))
                 put(
                     CalendarContract.Events.DESCRIPTION,
-                    "$memberName · 剂量：$dosage · 来自家庭健康管家"
+                    context.getString(R.string.calendar_medication_description, memberName, dosage) +
+                        " [homehealth:med:$reminderId]"
                 )
                 put(CalendarContract.Events.DTSTART, start)
                 put(CalendarContract.Events.DTEND, end)
@@ -82,8 +89,11 @@ object CalendarEventHelper {
             }
 
             val eventUri = context.contentResolver
-                .insert(CalendarContract.Events.CONTENT_URI, values) ?: return@forEach
-            val eventId = eventUri.lastPathSegment?.toLongOrNull() ?: return@forEach
+                .insert(CalendarContract.Events.CONTENT_URI, values)
+                ?: throw IOException("无法创建日历事件")
+            val eventId = eventUri.lastPathSegment?.toLongOrNull()
+                ?: throw IOException("无法读取日历事件 ID")
+            eventIds.add(eventId)
 
             // 事件提醒：开始前 5 分钟通知
             val reminderValues = ContentValues().apply {
@@ -93,7 +103,11 @@ object CalendarEventHelper {
             }
             context.contentResolver
                 .insert(CalendarContract.Reminders.CONTENT_URI, reminderValues)
-            eventIds.add(eventId)
+                ?: throw IOException("无法创建日历通知")
+        }
+        } catch (e: Exception) {
+            runCatching { deleteCalendarEvents(context, eventIds) }
+            throw e
         }
         return eventIds
     }
@@ -119,7 +133,9 @@ object CalendarEventHelper {
         context: Context,
         medicationName: String,
         memberName: String?,
-        storedEventIds: List<Long> = emptyList()
+        storedEventIds: List<Long> = emptyList(),
+        reminderId: String? = null,
+        protectedEventIds: List<Long> = emptyList()
     ): Int {
         var deleted = 0
 
@@ -133,7 +149,10 @@ object CalendarEventHelper {
         }
 
         // 2) 按签名兜底：查询本应用写入的同名药品事件
-        val title = "服药：$medicationName"
+        val titles = listOf(
+            "服药：$medicationName",
+            context.getString(R.string.calendar_medication_title, medicationName)
+        ).distinct()
         val descPattern = if (!memberName.isNullOrBlank()) {
             // 描述格式：「成员名 · 剂量：xx · 来自家庭健康管家」，匹配成员名紧跟的分隔符避免误删同名
             "%$memberName · 剂量：%"
@@ -143,17 +162,30 @@ object CalendarEventHelper {
         val selection =
             "${CalendarContract.Events.TITLE} = ? AND ${CalendarContract.Events.DESCRIPTION} LIKE ?"
         val matchedIds = mutableListOf<Long>()
-        context.contentResolver.query(
-            CalendarContract.Events.CONTENT_URI,
-            arrayOf(CalendarContract.Events._ID),
-            selection,
-            arrayOf(title, descPattern),
-            null
-        )?.use { cursor ->
-            while (cursor.moveToNext()) matchedIds.add(cursor.getLong(0))
+        titles.forEach { title ->
+            context.contentResolver.query(
+                CalendarContract.Events.CONTENT_URI,
+                arrayOf(CalendarContract.Events._ID),
+                selection,
+                arrayOf(title, descPattern),
+                null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) matchedIds.add(cursor.getLong(0))
+            }
+        }
+        if (reminderId != null) {
+            context.contentResolver.query(
+                CalendarContract.Events.CONTENT_URI,
+                arrayOf(CalendarContract.Events._ID),
+                "${CalendarContract.Events.DESCRIPTION} LIKE ?",
+                arrayOf("%[homehealth:med:$reminderId]%"),
+                null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) matchedIds.add(cursor.getLong(0))
+            }
         }
         // 去掉已按 ID 删除过的，再删剩余
-        matchedIds.filter { it !in storedEventIds }.forEach { id ->
+        matchedIds.distinct().filter { it !in storedEventIds && it !in protectedEventIds }.forEach { id ->
             val eventUri = android.net.Uri.withAppendedPath(
                 CalendarContract.Events.CONTENT_URI, id.toString()
             )

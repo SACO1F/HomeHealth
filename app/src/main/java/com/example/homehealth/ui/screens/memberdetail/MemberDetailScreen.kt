@@ -50,10 +50,15 @@ import com.example.homehealth.ui.components.MemberAvatar
 import com.example.homehealth.ui.components.MemberEditDialog
 import com.example.homehealth.ui.components.RecordInputDialog
 import com.example.homehealth.ui.components.TrendIndicator
+import com.example.homehealth.ui.components.dietLabel
+import com.example.homehealth.ui.components.drinkingLabel
+import com.example.homehealth.ui.components.exerciseLabel
 import com.example.homehealth.ui.components.genderLabel
 import com.example.homehealth.ui.components.relationshipLabel
 import com.example.homehealth.ui.components.relativeTime
+import com.example.homehealth.ui.components.smokingLabel
 import com.example.homehealth.ui.navigation.Routes
+import com.example.homehealth.ui.navigation.navigateToTopLevel
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.util.HealthTypes
 
@@ -90,7 +95,7 @@ fun MemberDetailScreen(
                     ) {
                         Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.detail_edit_cd))
                     }
-                    IconButton(onClick = { navController.navigate(Routes.ALERTS) }) {
+                    IconButton(onClick = { navController.navigateToTopLevel(Routes.ALERTS) }) {
                         Icon(Icons.Filled.Notifications, contentDescription = stringResource(R.string.detail_alerts_cd))
                         if (unreadAlerts > 0) Badge { Text("$unreadAlerts") }
                     }
@@ -139,6 +144,48 @@ fun MemberDetailScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            // 健康档案摘要（仅展示已填写项）
+                            member?.let { m ->
+                                val bodyLine = listOfNotNull(
+                                    m.bloodType?.let { "${stringResource(R.string.member_blood_type)} $it" },
+                                    m.waistCm?.takeIf { it > 0 }
+                                        ?.let { stringResource(R.string.detail_waist_cm, trimNum(it)) }
+                                ).joinToString(" · ")
+                                if (bodyLine.isNotBlank()) {
+                                    Text(
+                                        text = bodyLine,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                val lifeStyle = listOfNotNull(
+                                    m.exercise?.let { "${stringResource(R.string.member_exercise_label)} ${exerciseLabel(it)}" },
+                                    m.diet?.let { "${stringResource(R.string.member_diet_label)} ${dietLabel(it)}" },
+                                    m.smoking?.let { "${stringResource(R.string.member_smoking_label)} ${smokingLabel(it)}" },
+                                    m.drinking?.let { "${stringResource(R.string.member_drinking_label)} ${drinkingLabel(it)}" }
+                                ).joinToString(" · ")
+                                if (lifeStyle.isNotBlank()) {
+                                    Text(
+                                        text = lifeStyle,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                m.chronicConditions?.trim()?.takeIf { it.isNotBlank() }?.let {
+                                    Text(
+                                        text = "${stringResource(R.string.detail_chronic)}：$it",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                m.surgeryHistory?.trim()?.takeIf { it.isNotBlank() }?.let {
+                                    Text(
+                                        text = "${stringResource(R.string.detail_surgery)}：$it",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -150,7 +197,7 @@ fun MemberDetailScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { navController.navigate(Routes.ALERTS) }
+                            .clickable { navController.navigateToTopLevel(Routes.ALERTS) }
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
@@ -229,8 +276,8 @@ fun MemberDetailScreen(
             MemberEditDialog(
                 member = current,
                 onDismiss = { showEditDialog = false },
-                onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl ->
-                    viewModel.updateMember(current, name, relationship, dob, gender, heightCm, weightKg, avatarUrl)
+                onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health ->
+                    viewModel.updateMember(current, name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health)
                     showEditDialog = false
                 }
             )
@@ -277,7 +324,7 @@ private fun MetricCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(HealthTypes.labelRes(metric.type)),
+                    text = com.example.homehealth.ui.components.metricLabel(metric.type),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -320,7 +367,7 @@ private fun RecentRecordRow(record: HealthRecord) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(HealthTypes.labelRes(record.type)),
+                    text = com.example.homehealth.ui.components.metricLabel(record.type),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
@@ -340,3 +387,7 @@ private fun RecentRecordRow(record: HealthRecord) {
         }
     }
 }
+
+/** 85.0 → 85（去掉无意义的小数位，健康档案展示用） */
+private fun trimNum(v: Double): String =
+    if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()

@@ -9,6 +9,8 @@ import com.example.homehealth.domain.repository.AlertRepository
 import com.example.homehealth.domain.repository.FamilyRepository
 import com.example.homehealth.domain.repository.HealthRecordRepository
 import com.example.homehealth.domain.usecase.DetectAnomaliesUseCase
+import com.example.homehealth.ui.components.MemberHealthInfo
+import com.example.homehealth.ui.components.withHealthInfo
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.util.HealthTypes
 import com.example.homehealth.util.SchemaNormalizer
@@ -117,7 +119,8 @@ class MemberDetailViewModel @Inject constructor(
         gender: String?,
         heightCm: Double?,
         weightKg: Double?,
-        avatarUrl: String? = null
+        avatarUrl: String? = null,
+        health: MemberHealthInfo = MemberHealthInfo()
     ) {
         viewModelScope.launch {
             // 头像被替换或清除时删除旧头像文件
@@ -125,7 +128,7 @@ class MemberDetailViewModel @Inject constructor(
                 runCatching { java.io.File(existing.avatarUrl).delete() }
             }
             familyRepository.upsertMember(
-                existing.copy(
+                existing.withHealthInfo(health).copy(
                     name = name,
                     relationship = relationship,
                     avatarUrl = avatarUrl,

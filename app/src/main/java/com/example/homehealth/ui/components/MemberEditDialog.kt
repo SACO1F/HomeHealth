@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,14 +19,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +48,9 @@ import com.example.homehealth.R
 import com.example.homehealth.data.local.entity.FamilyMember
 import com.example.homehealth.util.DateUtils
 import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /** 关系 code（数据库存储值）。旧版本直接存中文，读取时经 [normalize] 归一化 */
 object Relationships {
@@ -101,7 +111,8 @@ fun memberPickerLabel(name: String, relationship: String): String =
 /** 性别选项（label ↔ code） */
 val GENDERS = listOf("male" to "male", "female" to "female", "other" to "other")
 
-/** 添加 / 编辑家庭成员对话框（含头像设置） */
+/** 添加 / 编辑家庭成员对话框（含头像设置与健康档案） */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MemberEditDialog(
     member: FamilyMember? = null,
@@ -113,7 +124,8 @@ fun MemberEditDialog(
         gender: String?,
         heightCm: Double?,
         weightKg: Double?,
-        avatarUrl: String?
+        avatarUrl: String?,
+        health: MemberHealthInfo
     ) -> Unit
 ) {
     val context = LocalContext.current
@@ -126,6 +138,17 @@ fun MemberEditDialog(
     var avatarPath by remember { mutableStateOf(member?.avatarUrl ?: "") }
     var nameError by remember { mutableStateOf(false) }
     var dobError by remember { mutableStateOf(false) }
+    var showDobPicker by remember { mutableStateOf(false) }
+
+    // ---- 健康档案（均可空） ----
+    var bloodType by remember { mutableStateOf(member?.bloodType) }
+    var waist by remember { mutableStateOf(member?.waistCm?.let { trimNum(it) } ?: "") }
+    var exercise by remember { mutableStateOf(member?.exercise) }
+    var diet by remember { mutableStateOf(member?.diet) }
+    var smoking by remember { mutableStateOf(member?.smoking) }
+    var drinking by remember { mutableStateOf(member?.drinking) }
+    var chronic by remember { mutableStateOf(member?.chronicConditions ?: "") }
+    var surgery by remember { mutableStateOf(member?.surgeryHistory ?: "") }
 
     val pickAvatar = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -192,21 +215,22 @@ fun MemberEditDialog(
                     label = stringResource(R.string.member_gender_label),
                     onSelect = { label -> genderCode = genderOptions.first { it.second == label }.first }
                 )
-                OutlinedTextField(
-                    value = dob,
-                    onValueChange = { dob = it; dobError = false },
-                    label = { Text(stringResource(R.string.member_dob_label)) },
-                    isError = dobError,
-                    supportingText = {
-                        when {
-                            dobError -> Text(stringResource(R.string.member_dob_error))
-                            ageText != null -> Text(stringResource(R.string.member_age_hint, ageText))
-                            else -> Text("")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = { showDobPicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (dob.isBlank()) stringResource(R.string.member_dob_pick)
+                            else stringResource(R.string.member_dob_selected, dob))
+                    }
+                    if (dob.isNotBlank()) {
+                        TextButton(onClick = { dob = ""; dobError = false }) {
+                            Text(stringResource(R.string.member_dob_clear))
                         }
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    }
+                }
+                if (dobError) Text(stringResource(R.string.member_dob_error))
+                else if (ageText != null) Text(stringResource(R.string.member_age_hint, ageText))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = height,
@@ -225,13 +249,80 @@ fun MemberEditDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                // ---- 健康信息（参与健康问答上下文） ----
+                HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
+                Text(
+                    stringResource(R.string.member_health_section),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                NullableDropdown(
+                    label = stringResource(R.string.member_blood_type),
+                    kind = ProfileKind.BLOOD_TYPE,
+                    value = bloodType,
+                    onSelect = { bloodType = it }
+                )
+                OutlinedTextField(
+                    value = waist,
+                    onValueChange = { waist = filterNumber(it) },
+                    label = { Text(stringResource(R.string.member_waist_label)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                NullableDropdown(
+                    label = stringResource(R.string.member_exercise_label),
+                    kind = ProfileKind.EXERCISE,
+                    value = exercise,
+                    onSelect = { exercise = it }
+                )
+                NullableDropdown(
+                    label = stringResource(R.string.member_diet_label),
+                    kind = ProfileKind.DIET,
+                    value = diet,
+                    onSelect = { diet = it }
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    NullableDropdown(
+                        label = stringResource(R.string.member_smoking_label),
+                        kind = ProfileKind.SMOKING,
+                        value = smoking,
+                        onSelect = { smoking = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    NullableDropdown(
+                        label = stringResource(R.string.member_drinking_label),
+                        kind = ProfileKind.DRINKING,
+                        value = drinking,
+                        onSelect = { drinking = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                OutlinedTextField(
+                    value = chronic,
+                    onValueChange = { chronic = it },
+                    label = { Text(stringResource(R.string.member_chronic_label)) },
+                    supportingText = { Text(stringResource(R.string.member_chronic_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = surgery,
+                    onValueChange = { surgery = it },
+                    label = { Text(stringResource(R.string.member_surgery_label)) },
+                    supportingText = { Text(stringResource(R.string.member_surgery_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 val trimmedName = name.trim()
                 val trimmedDob = dob.trim()
-                val validDob = trimmedDob.isEmpty() || DateUtils.parseDate(trimmedDob) != null
+                val validDob = trimmedDob.isEmpty() ||
+                    (DateUtils.parseDate(trimmedDob)?.let { it <= System.currentTimeMillis() } == true)
                 if (trimmedName.isEmpty()) {
                     nameError = true
                 } else if (!validDob) {
@@ -244,7 +335,17 @@ fun MemberEditDialog(
                         genderCode,
                         height.trim().toDoubleOrNull(),
                         weight.trim().toDoubleOrNull(),
-                        avatarPath.ifBlank { null }
+                        avatarPath.ifBlank { null },
+                        MemberHealthInfo(
+                            bloodType = bloodType,
+                            waistCm = waist.trim().toDoubleOrNull(),
+                            exercise = exercise,
+                            diet = diet,
+                            smoking = smoking,
+                            drinking = drinking,
+                            chronicConditions = chronic.trim().ifBlank { null },
+                            surgeryHistory = surgery.trim().ifBlank { null }
+                        )
                     )
                 }
             }) { Text(stringResource(R.string.common_save)) }
@@ -252,6 +353,57 @@ fun MemberEditDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         }
+    )
+
+    if (showDobPicker) {
+        val initial = runCatching {
+            LocalDate.parse(dob).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        }.getOrNull()
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initial)
+        DatePickerDialog(
+            onDismissRequest = { showDobPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { selected ->
+                        val date = Instant.ofEpochMilli(selected).atZone(ZoneOffset.UTC).toLocalDate()
+                        if (!date.isAfter(LocalDate.now())) {
+                            dob = date.toString()
+                            dobError = false
+                            showDobPicker = false
+                        } else dobError = true
+                    }
+                }) { Text(stringResource(R.string.common_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDobPicker = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        ) { DatePicker(state = pickerState, showModeToggle = false) }
+    }
+}
+
+/** 可空单选下拉：首位固定为「未填写」，选择它即清空该字段 */
+@Composable
+private fun NullableDropdown(
+    label: String,
+    kind: ProfileKind,
+    value: String?,
+    onSelect: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val options = buildList {
+        add(null to profileUnsetLabel())
+        kind.codes.forEach { code -> add(code to profileOptionLabel(kind, code)) }
+    }
+    val selectedLabel = options.firstOrNull { it.first == value }?.second
+        ?: options.first().second
+    DropdownSelector(
+        options = options.map { it.second },
+        selected = selectedLabel,
+        label = label,
+        onSelect = { picked -> onSelect(options.first { it.second == picked }.first) },
+        modifier = modifier
     )
 }
 

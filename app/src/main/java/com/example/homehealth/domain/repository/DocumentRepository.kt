@@ -25,7 +25,12 @@ interface DocumentRepository {
     suspend fun parseDocument(document: MedicalDocument, documentType: String? = null): ParseResult
 
     /** 用户确认后：保存健康记录，文档状态置为 COMPLETED */
-    suspend fun confirmRecords(document: MedicalDocument, records: List<HealthRecord>)
+    suspend fun confirmRecords(
+        document: MedicalDocument,
+        records: List<HealthRecord>,
+        normalizationNotes: Map<String, String>
+    )
+
 
     suspend fun markFailed(document: MedicalDocument, error: String?)
 

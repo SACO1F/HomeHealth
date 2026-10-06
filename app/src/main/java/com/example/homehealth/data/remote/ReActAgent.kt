@@ -1,5 +1,6 @@
 package com.example.homehealth.data.remote
 
+import com.example.homehealth.data.local.entity.profileSummary
 import com.example.homehealth.domain.tool.GetAlertsTool
 import com.example.homehealth.domain.tool.SearchRecordsTool
 import com.example.homehealth.domain.tool.ToolContext
@@ -46,7 +47,8 @@ class ReActAgent @Inject constructor(
     fun run(context: ToolContext, recordsOverview: String?): Flow<AgentEvent> = flow {
         val entries = mutableListOf<AgentEntry>()
         entries += AgentEntry.System(SYSTEM_PROMPT)
-        entries += AgentEntry.User(userPrompt(context, recordsOverview), context.imageBase64)
+        // 附图仅由 read_report_image 工具送往视觉模型一次；Agent 多轮始终是纯文本。
+        entries += AgentEntry.User(userPrompt(context, recordsOverview), null)
 
         val answer = StringBuilder()
         val thinking = StringBuilder()
@@ -132,8 +134,13 @@ class ReActAgent @Inject constructor(
                     call.name in disabled -> ToolResult.fail("工具 ${call.name} 因连续失败已被禁用，请换个方式。")
                     else -> withTimeoutOrNull(timeoutMsFor(tool)) {
                         // 工具内部必须自行容错；这里再兜一层，保证任何异常都不会掀翻整个循环
-                        runCatching { tool.execute(context, call.argsJson) }
-                            .getOrElse { ToolResult.fail("执行异常：${it.message ?: it.javaClass.simpleName}") }
+                        try {
+                            tool.execute(context, call.argsJson)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            ToolResult.fail("执行异常：${e.message ?: e.javaClass.simpleName}")
+                        }
                     } ?: ToolResult.fail("工具 ${call.name} 执行超时。")
                 }
 
@@ -182,6 +189,12 @@ class ReActAgent @Inject constructor(
     private fun userPrompt(context: ToolContext, recordsOverview: String?): String = buildString {
         appendLine("家庭成员：${context.member.name}")
         context.member.gender?.takeIf { it.isNotBlank() }?.let { appendLine("性别：$it") }
+        // 个人健康档案（血型 / 腰围 / 运动 / 饮食 / 吸烟饮酒 / 慢性病 / 手术史）：静态背景信息，
+        // 直接进首轮上下文；记录明细仍必须靠工具取，两者不冲突
+        context.member.profileSummary().takeIf { it.isNotBlank() }?.let {
+            appendLine("个人健康档案（用户自述，静态背景）：")
+            it.lineSequence().forEach { line -> appendLine("  $line") }
+        }
         recordsOverview?.takeIf { it.isNotBlank() }?.let {
             appendLine("已保存记录概览：$it")
         }

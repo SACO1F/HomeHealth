@@ -53,7 +53,13 @@ object AlertText {
         val value = alert.valueText.orEmpty()
         val unit = alert.unitText.orEmpty()
         val ref = alert.refText.orEmpty()
-        val span = alert.spanText.orEmpty()
+        val span = when (val stored = alert.spanText.orEmpty()) {
+            "same_day", "同日" -> context.getString(R.string.alert_span_same_day)
+            else -> {
+                val days = stored.removePrefix("days:").removePrefix("近 ").removeSuffix(" 天").toIntOrNull()
+                if (days != null) context.getString(R.string.alert_span_days, days) else stored
+            }
+        }
         // 越界类文案的第 4 个占位符是「检测日期」，来自告警的创建时间
         val date = DateUtils.formatDate(alert.createdDate)
 

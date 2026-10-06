@@ -7,6 +7,7 @@ import com.example.homehealth.data.local.entity.HealthRecord
 import com.example.homehealth.domain.repository.AlertRepository
 import com.example.homehealth.domain.repository.FamilyRepository
 import com.example.homehealth.domain.repository.HealthRecordRepository
+import com.example.homehealth.ui.components.MemberHealthInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -60,7 +61,8 @@ class FamilyListViewModel @Inject constructor(
         gender: String?,
         heightCm: Double?,
         weightKg: Double?,
-        avatarUrl: String? = null
+        avatarUrl: String? = null,
+        health: MemberHealthInfo = MemberHealthInfo()
     ) {
         viewModelScope.launch {
             familyRepository.upsertMember(
@@ -72,7 +74,15 @@ class FamilyListViewModel @Inject constructor(
                     dateOfBirth = dateOfBirth,
                     gender = gender,
                     heightCm = heightCm,
-                    weightKg = weightKg
+                    weightKg = weightKg,
+                    bloodType = health.bloodType,
+                    waistCm = health.waistCm,
+                    exercise = health.exercise,
+                    diet = health.diet,
+                    smoking = health.smoking,
+                    drinking = health.drinking,
+                    chronicConditions = health.chronicConditions,
+                    surgeryHistory = health.surgeryHistory
                 )
             )
         }

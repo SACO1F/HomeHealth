@@ -9,6 +9,7 @@ import com.example.homehealth.data.local.dao.QAHistoryDao
 import com.example.homehealth.data.local.entity.FamilyMember
 import com.example.homehealth.domain.repository.FamilyRepository
 import com.example.homehealth.util.CalendarEventHelper
+import com.example.homehealth.worker.MedicationAlarmScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import java.io.File
@@ -45,12 +46,14 @@ class FamilyRepositoryImpl @Inject constructor(
     override suspend fun deleteMember(member: FamilyMember) {
         // 1) 系统日历：复用「删除单个提醒」的双通道清理（事件 ID 精确删 + 标题/描述签名兜底）
         medicationReminderDao.getByMember(member.id).forEach { reminder ->
+            MedicationAlarmScheduler.cancel(context, reminder)
             runCatching {
                 CalendarEventHelper.deleteMedicationEvents(
                     context = context,
                     medicationName = reminder.medicationName,
                     memberName = member.name,
-                    storedEventIds = reminder.calendarEventIdList()
+                    storedEventIds = reminder.calendarEventIdList(),
+                    reminderId = reminder.id
                 )
             }
         }

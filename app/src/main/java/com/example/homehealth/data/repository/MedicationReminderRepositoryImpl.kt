@@ -27,4 +27,7 @@ class MedicationReminderRepositoryImpl @Inject constructor(
 
     override suspend fun getAll(): List<MedicationReminder> =
         medicationReminderDao.getAll()
+
+    override suspend fun getById(id: String): MedicationReminder? =
+        medicationReminderDao.getById(id)
 }

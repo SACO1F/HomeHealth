@@ -7,6 +7,7 @@ import com.example.homehealth.data.SettingsPrefs
 import com.example.homehealth.data.local.dao.HealthRecordDao
 import com.example.homehealth.data.local.dao.QAHistoryDao
 import com.example.homehealth.data.local.entity.FamilyMember
+import com.example.homehealth.data.local.entity.profileSummary
 import com.example.homehealth.data.local.entity.HealthRecord
 import com.example.homehealth.data.local.entity.QAHistory
 import com.example.homehealth.data.remote.AgentEvent
@@ -347,6 +348,17 @@ class QARepositoryImpl @Inject constructor(
     ): String =
         buildString {
             var remaining = SUMMARY_CHAR_BUDGET
+            // 个人健康档案（血型 / 腰围 / 生活方式 / 病史）：静态背景，先于记录明细给出，
+            // 让模型在解读数值时能结合吸烟饮酒、慢性病等背景
+            member.profileSummary().takeIf { it.isNotBlank() }?.let { profile ->
+                appendLine("【个人健康档案】（用户自述，静态背景）")
+                profile.lineSequence().forEach { line ->
+                    appendLine("  $line")
+                    remaining -= line.length + 3
+                }
+                appendLine()
+                remaining -= 20
+            }
             for ((type, list) in recordsByType) {
                 if (remaining <= 0) break
                 val def = HealthTypes.def(type)
@@ -406,6 +418,12 @@ class QARepositoryImpl @Inject constructor(
     ): String = buildString {
         var remaining = SUMMARY_CHAR_BUDGET
         appendLine("以下是与问题相关度最高的 ${hits.size} 条健康记录（成员：${member.name}），行首 [n] 为引用编号：")
+        // 个人健康档案：检索路径同样给出静态背景，口径与全量摘要路径一致
+        member.profileSummary().takeIf { it.isNotBlank() }?.let { profile ->
+            appendLine("个人健康档案（用户自述，静态背景）：")
+            profile.lineSequence().forEach { line -> appendLine("  $line") }
+            remaining -= profile.length
+        }
         for (hit in hits) {
             if (remaining <= 0) break
             val r = hit.record

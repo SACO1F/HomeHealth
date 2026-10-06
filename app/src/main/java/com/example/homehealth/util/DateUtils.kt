@@ -4,16 +4,20 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /** 日期工具 */
 object DateUtils {
 
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA)
-    private val dateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
+    // SimpleDateFormat 可变且非线程安全；UI 与 Worker 会并发调用。
+    fun formatDate(timestamp: Long): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(Date(timestamp))
 
-    fun formatDate(timestamp: Long): String = dateFormat.format(Date(timestamp))
-
-    fun formatDateTime(timestamp: Long): String = dateTimeFormat.format(Date(timestamp))
+    fun formatDateTime(timestamp: Long): String =
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(Date(timestamp))
 
     fun today(): Long = System.currentTimeMillis()
 
@@ -37,17 +41,8 @@ object DateUtils {
 
     /** 相对时间：今天 / 昨天 / N天前（english=true 时返回英文，供 UI 本地化显示） */
     fun relative(timestamp: Long, english: Boolean = false): String {
-        val now = Calendar.getInstance()
-        val target = Calendar.getInstance().apply { timeInMillis = timestamp }
-        val todayStart = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }
-        val diffDays = ((todayStart.timeInMillis -
-                (target.apply {
-                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-                }.timeInMillis)) / (24 * 3600 * 1000L)).toInt()
+        val target = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+        val diffDays = ChronoUnit.DAYS.between(target, LocalDate.now()).toInt()
         return when {
             diffDays <= 0 -> if (english) "Today" else "今天"
             diffDays == 1 -> if (english) "Yesterday" else "昨天"
@@ -57,12 +52,17 @@ object DateUtils {
     }
 
     /** 根据出生日期计算年龄 */
-    fun age(dateOfBirth: String?): Int? {
+    fun age(dateOfBirth: String?): Int? = ageAt(dateOfBirth, LocalDate.now())
+
+    internal fun ageAt(dateOfBirth: String?, onDate: LocalDate): Int? {
         val dob = parseDate(dateOfBirth ?: return null) ?: return null
         val birth = Calendar.getInstance().apply { timeInMillis = dob }
-        val now = Calendar.getInstance()
-        var age = now.get(Calendar.YEAR) - birth.get(Calendar.YEAR)
-        if (now.get(Calendar.DAY_OF_YEAR) < birth.get(Calendar.DAY_OF_YEAR)) age--
+        var age = onDate.year - birth.get(Calendar.YEAR)
+        val birthMonth = birth.get(Calendar.MONTH)
+        val nowMonth = onDate.monthValue - 1
+        if (nowMonth < birthMonth ||
+            (nowMonth == birthMonth && onDate.dayOfMonth < birth.get(Calendar.DAY_OF_MONTH))
+        ) age--
         return if (age >= 0) age else null
     }
 }

@@ -2,7 +2,9 @@ package com.example.homehealth.data.repository
 
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
 import com.example.homehealth.data.SettingsPrefs
+import com.example.homehealth.data.local.AppDatabase
 import com.example.homehealth.data.local.dao.HealthRecordDao
 import com.example.homehealth.data.local.dao.MedicalDocumentDao
 import com.example.homehealth.data.local.entity.HealthRecord
@@ -30,6 +32,7 @@ class DocumentRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val medicalDocumentDao: MedicalDocumentDao,
     private val healthRecordDao: HealthRecordDao,
+    private val database: AppDatabase,
     private val settingsPrefs: SettingsPrefs,
     private val llmClient: LlmClient,
     private val gson: Gson
@@ -52,22 +55,27 @@ class DocumentRepositoryImpl @Inject constructor(
     override suspend fun saveImageAndCreateDocument(uri: Uri, memberId: String): MedicalDocument =
         withContext(Dispatchers.IO) {
             val dir = File(context.filesDir, DOCUMENTS_DIR).apply { mkdirs() }
-            val fileName = "doc_${System.currentTimeMillis()}.jpg"
+            val fileName = "doc_${UUID.randomUUID()}.jpg"
             val dest = File(dir, fileName)
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                dest.outputStream().use { output -> input.copyTo(output) }
-            } ?: throw IOException("无法读取所选图片")
-            val document = MedicalDocument(
-                id = UUID.randomUUID().toString(),
-                memberId = memberId,
-                fileName = fileName,
-                filePath = dest.absolutePath,
-                uploadDate = System.currentTimeMillis(),
-                documentType = "lab_report",
-                parseStatus = ParseStatus.PROCESSING
-            )
-            medicalDocumentDao.insert(document)
-            document
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw IOException("无法读取所选图片")
+                val document = MedicalDocument(
+                    id = UUID.randomUUID().toString(),
+                    memberId = memberId,
+                    fileName = fileName,
+                    filePath = dest.absolutePath,
+                    uploadDate = System.currentTimeMillis(),
+                    documentType = "lab_report",
+                    parseStatus = ParseStatus.PROCESSING
+                )
+                medicalDocumentDao.insert(document)
+                document
+            } catch (e: Throwable) {
+                dest.delete()
+                throw e
+            }
         }
 
     /**
@@ -76,7 +84,8 @@ class DocumentRepositoryImpl @Inject constructor(
      * 不清理的话每张报告在设备上都要占两份空间。
      */
     override suspend fun deleteSourceImageIfOwned(uri: Uri) = withContext(Dispatchers.IO) {
-        if (uri.scheme != "content") return@withContext
+        if (uri.scheme != "content" ||
+            uri.authority != "${context.packageName}.fileprovider") return@withContext
         val segments = uri.pathSegments.orEmpty()
         // FileProvider 路径形如 /documents/<文件名>；不匹配的一律不动（相册等外部来源）
         if (segments.size != 2 || segments[0] != DOCUMENTS_DIR) return@withContext
@@ -125,6 +134,8 @@ class DocumentRepositoryImpl @Inject constructor(
             try {
                 val base64 = FileUtils.compressImageToBase64(File(document.filePath))
                 val result = llmClient.parseHealthDocument(base64)
+                // 即使没有提取出结构化指标，也保留模型原文供用户排查和后续重试。
+                medicalDocumentDao.updateRawText(document.id, result.rawText)
                 if (result.records.isEmpty()) {
                     throw IllegalStateException(
                         "未能从报告中识别出健康指标，请拍清晰完整后重试，或手动录入指标"
@@ -141,15 +152,30 @@ class DocumentRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun confirmRecords(document: MedicalDocument, records: List<HealthRecord>) {
-        healthRecordDao.insertAll(records)
-        medicalDocumentDao.update(
-            document.copy(
-                parseStatus = ParseStatus.COMPLETED,
-                extractedJson = gson.toJson(records),
-                errorMessage = null
+    override suspend fun confirmRecords(
+        document: MedicalDocument,
+        records: List<HealthRecord>,
+        normalizationNotes: Map<String, String>
+    ) {
+        database.withTransaction {
+            val current = medicalDocumentDao.getById(document.id)
+                ?: throw IllegalStateException("报告已被删除")
+            require(records.all { it.memberId == current.memberId && it.sourceDocumentId == current.id }) {
+                "报告与健康记录所属成员不一致"
+            }
+            if (current.parseStatus == ParseStatus.COMPLETED) return@withTransaction
+            // 兼容旧版可能留下的部分记录；同一报告重试只保留一组确认后的数据。
+            healthRecordDao.deleteBySourceDocument(current.id)
+            healthRecordDao.insertAll(records)
+            medicalDocumentDao.update(
+                current.copy(
+                    parseStatus = ParseStatus.COMPLETED,
+                    extractedJson = gson.toJson(records),
+                    normalizationNotesJson = gson.toJson(normalizationNotes),
+                    errorMessage = null
+                )
             )
-        )
+        }
     }
 
     override suspend fun markFailed(document: MedicalDocument, error: String?) {

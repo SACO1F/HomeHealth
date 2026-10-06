@@ -11,4 +11,5 @@ interface MedicationReminderRepository {
     suspend fun delete(reminder: MedicationReminder)
     suspend fun getActive(): List<MedicationReminder>
     suspend fun getAll(): List<MedicationReminder>
+    suspend fun getById(id: String): MedicationReminder?
 }

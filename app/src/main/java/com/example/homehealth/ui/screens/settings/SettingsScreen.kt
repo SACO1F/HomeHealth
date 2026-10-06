@@ -18,11 +18,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.QuestionAnswer
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -40,11 +43,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +64,7 @@ import com.example.homehealth.data.local.entity.FamilyMember
 import com.example.homehealth.data.remote.LlmProviders
 import com.example.homehealth.domain.model.LlmCallStats
 import com.example.homehealth.ui.components.MemberEditDialog
+import com.example.homehealth.ui.components.DropdownSelector
 import com.example.homehealth.ui.components.StatItem
 import com.example.homehealth.ui.components.relationshipLabel
 import com.example.homehealth.util.DateUtils
@@ -87,11 +94,13 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // 进入设置页时刷新一次调用统计
+    val exportShareTitle = stringResource(R.string.settings_export_share_title)
     LaunchedEffect(Unit) { viewModel.refreshLlmStats() }
 
     var showAddMember by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<FamilyMember?>(null) }
     var deleteTarget by remember { mutableStateOf<FamilyMember?>(null) }
+    var editingParseService by rememberSaveable { mutableStateOf(true) }
 
     // 事件处理
     LaunchedEffect(Unit) {
@@ -102,7 +111,7 @@ fun SettingsScreen(
                         context = context,
                         file = event.file,
                         mime = "application/json",
-                        title = context.getString(R.string.settings_export_share_title)
+                        title = exportShareTitle
                     )
                 }
                 is SettingsEvent.CheckEnqueued -> snackbarHostState.showSnackbar(event.message)
@@ -121,7 +130,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ---- 家庭成员管理 ----
@@ -238,40 +247,64 @@ fun SettingsScreen(
                 )
             }
 
-            // ---- 报告解析服务 ----
+            // ---- AI 服务：两个用途共用一套清晰的配置界面，配置仍分别保存 ----
             item {
-                SectionTitle(stringResource(R.string.settings_parse_section))
+                SectionTitle(stringResource(R.string.settings_ai_section))
             }
             item {
-                ProviderSettingsCard(
-                    subtitle = stringResource(R.string.settings_parse_desc),
-                    provider = parseProvider,
-                    apiKey = parseApiKey,
-                    model = parseModel,
-                    vision = true,
-                    keyUnreadable = parseKeyUnreadable,
-                    onProviderChange = viewModel::setParseProvider,
-                    onApiKeyChange = viewModel::setParseApiKey,
-                    onModelChange = viewModel::setParseModel
-                )
-            }
-
-            // ---- 健康问答服务 ----
-            item {
-                SectionTitle(stringResource(R.string.settings_qa_section))
-            }
-            item {
-                ProviderSettingsCard(
-                    subtitle = stringResource(R.string.settings_qa_desc),
-                    provider = qaProvider,
-                    apiKey = qaApiKey,
-                    model = qaModel,
-                    vision = false,
-                    keyUnreadable = qaKeyUnreadable,
-                    onProviderChange = viewModel::setQaProvider,
-                    onApiKeyChange = viewModel::setQaApiKey,
-                    onModelChange = viewModel::setQaModel
-                )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.settings_ai_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            AiServiceTile(
+                                title = stringResource(R.string.settings_parse_section),
+                                providerName = providerDisplayName(parseProvider),
+                                status = serviceStatus(parseProvider, parseApiKey, parseKeyUnreadable, true),
+                                icon = Icons.Filled.Description,
+                                selected = editingParseService,
+                                onClick = { editingParseService = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                            AiServiceTile(
+                                title = stringResource(R.string.settings_qa_section),
+                                providerName = providerDisplayName(qaProvider),
+                                status = serviceStatus(qaProvider, qaApiKey, qaKeyUnreadable, false),
+                                icon = Icons.Filled.QuestionAnswer,
+                                selected = !editingParseService,
+                                onClick = { editingParseService = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        HorizontalDivider()
+                        Text(
+                            stringResource(
+                                if (editingParseService) R.string.settings_parse_desc
+                                else R.string.settings_qa_desc
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        key(editingParseService) {
+                            ProviderSettingsFields(
+                                provider = if (editingParseService) parseProvider else qaProvider,
+                                apiKey = if (editingParseService) parseApiKey else qaApiKey,
+                                model = if (editingParseService) parseModel else qaModel,
+                                vision = editingParseService,
+                                keyUnreadable = if (editingParseService) parseKeyUnreadable else qaKeyUnreadable,
+                                onProviderChange = if (editingParseService) viewModel::setParseProvider else viewModel::setQaProvider,
+                                onApiKeyChange = if (editingParseService) viewModel::setParseApiKey else viewModel::setQaApiKey,
+                                onModelChange = if (editingParseService) viewModel::setParseModel else viewModel::setQaModel
+                            )
+                        }
+                    }
+                }
             }
 
             // ---- LLM 调用统计 ----
@@ -389,8 +422,8 @@ fun SettingsScreen(
     if (showAddMember) {
         MemberEditDialog(
             onDismiss = { showAddMember = false },
-            onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl ->
-                viewModel.addMember(name, relationship, dob, gender, heightCm, weightKg, avatarUrl)
+            onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health ->
+                viewModel.addMember(name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health)
                 showAddMember = false
             }
         )
@@ -400,8 +433,8 @@ fun SettingsScreen(
         MemberEditDialog(
             member = member,
             onDismiss = { editTarget = null },
-            onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl ->
-                viewModel.updateMember(member, name, relationship, dob, gender, heightCm, weightKg, avatarUrl)
+            onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health ->
+                viewModel.updateMember(member, name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health)
                 editTarget = null
             }
         )
@@ -475,14 +508,76 @@ private fun ModeOptionCard(
     }
 }
 
-/**
- * 服务供应商配置卡片：本地模式 / LLM 供应商直连。
- * vision=true 为报告解析（视觉模型，不显示无视觉能力的供应商）；
- * vision=false 为健康问答（文本模型）。
- */
 @Composable
-private fun ProviderSettingsCard(
-    subtitle: String,
+private fun providerDisplayName(provider: String): String =
+    when (provider) {
+        LlmProviders.LOCAL -> stringResource(R.string.provider_local)
+        LlmProviders.ZHIPU.id -> stringResource(R.string.settings_provider_zhipu)
+        LlmProviders.KIMI.id -> stringResource(R.string.settings_provider_kimi)
+        LlmProviders.QWEN.id -> stringResource(R.string.settings_provider_qwen)
+        else -> LlmProviders.byId(provider)?.name ?: provider
+    }
+
+@Composable
+private fun serviceStatus(
+    provider: String,
+    apiKey: String,
+    keyUnreadable: Boolean,
+    vision: Boolean
+): String = when {
+    provider == LlmProviders.LOCAL && vision -> stringResource(R.string.settings_ai_manual_only)
+    provider == LlmProviders.LOCAL -> stringResource(R.string.settings_ai_local_analysis)
+    keyUnreadable -> stringResource(R.string.settings_ai_key_invalid)
+    apiKey.isBlank() -> stringResource(R.string.settings_ai_key_missing)
+    else -> stringResource(R.string.settings_ai_ready)
+}
+
+/** 两项服务的概览入口，显示供应商和配置状态。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AiServiceTile(
+    title: String,
+    providerName: String,
+    status: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+            Text(
+                providerName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Text(
+                status,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** 共用表单，视觉服务仅列出支持图像输入的供应商。 */
+@Composable
+private fun ProviderSettingsFields(
     provider: String,
     apiKey: String,
     model: String,
@@ -492,54 +587,52 @@ private fun ProviderSettingsCard(
     onApiKeyChange: (String) -> Unit,
     onModelChange: (String) -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(subtitle, style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(10.dp))
+    val choices = listOf(LlmProviders.LOCAL to stringResource(R.string.provider_local)) +
+        LlmProviders.ALL.filter { !vision || it.visionModels.isNotEmpty() }
+            .map { it.id to providerDisplayName(it.id) }
+    DropdownSelector(
+        options = choices.map { it.second },
+        selected = choices.firstOrNull { it.first == provider }?.second ?: provider,
+        label = stringResource(R.string.settings_ai_provider_label),
+        onSelect = { name -> choices.firstOrNull { it.second == name }?.let { onProviderChange(it.first) } }
+    )
 
-            // 本地模式
-            ModeOptionCard(
-                title = stringResource(R.string.provider_local),
-                desc = stringResource(
+    if (provider == LlmProviders.LOCAL) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                stringResource(
                     if (vision) R.string.provider_local_vision_desc
                     else R.string.provider_local_qa_desc
                 ),
-                selected = provider == LlmProviders.LOCAL,
-                onClick = { onProviderChange(LlmProviders.LOCAL) }
+                modifier = Modifier.padding(14.dp),
+                style = MaterialTheme.typography.bodySmall
             )
-
-            // LLM 供应商（解析场景跳过无视觉模型的供应商）
-            LlmProviders.ALL.forEach { p ->
-                if (vision && p.visionModels.isEmpty()) return@forEach
-                Spacer(Modifier.height(8.dp))
-                val models = if (vision) p.visionModels else p.chatModels
-                ModeOptionCard(
-                    title = p.name,
-                    desc = listOfNotNull(p.note, p.keyHint).joinToString("；"),
-                    selected = provider == p.id,
-                    onClick = { onProviderChange(p.id) }
-                )
-                if (provider == p.id) {
-                    Spacer(Modifier.height(10.dp))
-                    ApiKeyField(
-                        apiKey = apiKey,
-                        keyUnreadable = keyUnreadable,
-                        onApiKeyChange = onApiKeyChange
-                    )
-
-                    // 模型配置：允许自由输入，预设清单只作快捷填入
-                    if (models.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        ModelSelector(
-                            models = models,
-                            model = model,
-                            vision = vision,
-                            onModelChange = onModelChange
-                        )
-                    }
-                }
-            }
+        }
+    } else {
+        val selectedProvider = LlmProviders.byId(provider)
+        Text(
+            stringResource(R.string.settings_ai_key_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        ApiKeyField(
+            apiKey = apiKey,
+            keyUnreadable = keyUnreadable,
+            onApiKeyChange = onApiKeyChange
+        )
+        val models = if (vision) selectedProvider?.visionModels else selectedProvider?.chatModels
+        if (!models.isNullOrEmpty()) {
+            ModelSelector(
+                models = models,
+                model = model,
+                vision = vision,
+                onModelChange = onModelChange
+            )
         }
     }
 }

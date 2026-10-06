@@ -126,8 +126,8 @@ fun FamilyListScreen(
     if (showAddDialog) {
         MemberEditDialog(
             onDismiss = { showAddDialog = false },
-            onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl ->
-                viewModel.addMember(name, relationship, dob, gender, heightCm, weightKg, avatarUrl)
+            onSave = { name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health ->
+                viewModel.addMember(name, relationship, dob, gender, heightCm, weightKg, avatarUrl, health)
                 showAddDialog = false
             }
         )
@@ -204,7 +204,7 @@ private fun latestSummary(latestByType: Map<String, HealthRecord>): String {
     )
     val parts = ordered.take(3).map { (type, r) ->
         val unit = r.unit.trim().takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
-        "${stringResource(HealthTypes.labelRes(type))} ${r.value}$unit"
+        "${com.example.homehealth.ui.components.metricLabel(type)} ${r.value}$unit"
     }
     return stringResource(R.string.family_recent_prefix) + parts.joinToString("  ·  ")
 }

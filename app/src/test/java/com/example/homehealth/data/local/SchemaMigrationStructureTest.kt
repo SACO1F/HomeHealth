@@ -176,6 +176,51 @@ class SchemaMigrationStructureTest {
         )
     }
 
+    @Test
+    fun `v8到v9保留解析原文与归一化说明`() {
+        val after = applyAll(8, listOf(AppMigrationSql.V8_TO_V9))
+        assertEquals("TEXT", after.getValue("medical_documents").getValue("rawText"))
+        assertEquals("TEXT", after.getValue("medical_documents").getValue("normalizationNotesJson"))
+        assertEquals(schemaOf(9), after)
+    }
+
+    @Test
+    fun `从v4连续迁移到v9与快照一致`() {
+        val after = applyAll(4, listOf(
+            AppMigrationSql.V4_TO_V5, AppMigrationSql.V5_TO_V6,
+            AppMigrationSql.V6_TO_V7, AppMigrationSql.V7_TO_V8,
+            AppMigrationSql.V8_TO_V9
+        ))
+        assertEquals(schemaOf(9), after)
+    }
+
+    @Test
+    fun `v9到v10为family_members新增健康档案8列`() {
+        val after = applyAll(9, listOf(AppMigrationSql.V9_TO_V10))
+        val members = after.getValue("family_members")
+        for (column in listOf(
+            "bloodType", "waistCm", "exercise", "diet",
+            "smoking", "drinking", "chronicConditions", "surgeryHistory"
+        )) {
+            assertTrue("缺少列 $column", column in members)
+        }
+        assertEquals("REAL", members.getValue("waistCm"))
+        assertEquals("TEXT", members.getValue("bloodType"))
+        // 其余表不受影响：这一跳只改 family_members
+        assertEquals(schemaOf(9).getValue("health_records"), after.getValue("health_records"))
+        assertEquals(schemaOf(10), after)
+    }
+
+    @Test
+    fun `从v4连续迁移到v10与快照一致`() {
+        val after = applyAll(4, listOf(
+            AppMigrationSql.V4_TO_V5, AppMigrationSql.V5_TO_V6,
+            AppMigrationSql.V6_TO_V7, AppMigrationSql.V7_TO_V8,
+            AppMigrationSql.V8_TO_V9, AppMigrationSql.V9_TO_V10
+        ))
+        assertEquals(schemaOf(10), after)
+    }
+
     private companion object {
         const val SCHEMA_PACKAGE = "com.example.homehealth.data.local.AppDatabase"
 

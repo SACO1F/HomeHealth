@@ -27,17 +27,22 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import java.io.IOException
 import java.net.SocketTimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * 通用 LLM 客户端：
@@ -298,7 +303,6 @@ class LlmClient @Inject constructor(
         val startedAt = System.currentTimeMillis()
         var attempts = 0
         var completionChars = 0
-
         try {
             val answer = withRetry(maxAttempts) {
                 attempts++
@@ -316,6 +320,7 @@ class LlmClient @Inject constructor(
             )
             answer
         } catch (e: Throwable) {
+            currentCoroutineContext().ensureActive()
             // 协程取消是用户主动行为，不该记成一次失败调用
             if (e !is CancellationException) {
                 recordCall(
@@ -384,8 +389,30 @@ class LlmClient @Inject constructor(
         )
     }
 
+    /** 非流式请求同样随协程取消，涵盖等待响应和读取响应体。 */
+    private suspend fun executeCancellable(request: Request): Pair<Int, String> =
+        suspendCancellableCoroutine { continuation ->
+            val call = okHttpClient.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    continuation.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        response.use { resp ->
+                            continuation.resume(resp.code to resp.body?.string().orEmpty())
+                        }
+                    } catch (e: Exception) {
+                        continuation.resumeWithException(e)
+                    }
+                }
+            })
+        }
+
     /** OpenAI 兼容协议：POST {base}/chat/completions */
-    private fun executeOpenAi(
+    private suspend fun executeOpenAi(
         baseUrl: String,
         apiKey: String,
         model: String,
@@ -404,11 +431,10 @@ class LlmClient @Inject constructor(
             .post(body)
             .build()
 
-        return okHttpClient.newCall(request).execute().use { resp ->
-            val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                throw HttpStatusException(resp.code, "HTTP ${resp.code}：${extractErrMsg(text)}")
-            }
+        val (code, text) = executeCancellable(request)
+        if (code !in 200..299) {
+            throw HttpStatusException(code, "HTTP $code：${extractErrMsg(text)}")
+        }
             val parsed = runCatching {
                 gson.fromJson(text, ChatCompletionResponse::class.java)
             }.getOrNull()
@@ -424,12 +450,11 @@ class LlmClient @Inject constructor(
             // 深度思考模型：思考过程在 reasoning_content（DeepSeek/智谱）或 thinking 字段
             val thinking = message.reasoningContent?.takeIf { it.isNotBlank() }
                 ?: message.thinking?.takeIf { it.isNotBlank() }
-            LlmAnswer(content, thinking)
-        }
+        return LlmAnswer(content, thinking)
     }
 
     /** Anthropic Messages API：POST {base}/v1/messages（system 独立传参，图片用 base64 source） */
-    private fun executeAnthropic(
+    private suspend fun executeAnthropic(
         baseUrl: String,
         apiKey: String,
         model: String,
@@ -439,7 +464,7 @@ class LlmClient @Inject constructor(
     ): LlmAnswer {
         val url = baseUrl.trimEnd('/') + "/v1/messages"
 
-        fun post(withTemperature: Boolean): Pair<Int, String> {
+        suspend fun post(withTemperature: Boolean): Pair<Int, String> {
             val body = anthropicBody(
                 model = model,
                 messages = messages,
@@ -453,9 +478,7 @@ class LlmClient @Inject constructor(
                 .header(ANTHROPIC_VERSION_HEADER, ANTHROPIC_VERSION)
                 .post(body.toRequestBody(JSON_MEDIA_TYPE))
                 .build()
-            return okHttpClient.newCall(request).execute().use { resp ->
-                resp.code to resp.body?.string().orEmpty()
-            }
+            return executeCancellable(request)
         }
 
         var (code, text) = post(withTemperature = true)

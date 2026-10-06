@@ -33,7 +33,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,7 +49,6 @@ import com.example.homehealth.data.local.dao.AlertWithMemberName
 import com.example.homehealth.ui.components.SeverityBadge
 import com.example.homehealth.util.AlertText
 import com.example.homehealth.util.DateUtils
-import kotlinx.coroutines.launch
 
 /** 预警中心：按严重程度排序，支持未读过滤与立即检测 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,10 +59,20 @@ fun AlertsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val hapticFeedback = LocalHapticFeedback.current
     val context = LocalContext.current
     var deleteTarget by remember { mutableStateOf<AlertWithMemberName?>(null) }
+    var detectedCount by remember { mutableStateOf<Int?>(null) }
+    val detectionMessage = detectedCount?.let { count ->
+        if (count > 0) stringResource(R.string.alerts_detected_new, count)
+        else stringResource(R.string.alerts_detected_none)
+    }
+    LaunchedEffect(detectionMessage) {
+        detectionMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            detectedCount = null
+        }
+    }
 
     // 进入预警中心时静默检测一次，保证预警与最新数据同步（新预警自动出现，列表随 Room 流刷新）
     LaunchedEffect(Unit) { viewModel.refreshOnEnter() }
@@ -77,14 +85,7 @@ fun AlertsScreen(
                 title = { Text(stringResource(R.string.alerts_title)) },
                 actions = {
                     IconButton(onClick = {
-                        viewModel.runDetection { created ->
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    if (created > 0) context.getString(R.string.alerts_detected_new, created)
-                                    else context.getString(R.string.alerts_detected_none)
-                                )
-                            }
-                        }
+                        viewModel.runDetection { created -> detectedCount = created }
                     }) {
                         Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.alerts_run_now_cd))
                     }
@@ -131,7 +132,7 @@ fun AlertsScreen(
                 )
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 24.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(state.alerts, key = { it.alert.id }) { item ->

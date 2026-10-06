@@ -1,6 +1,9 @@
 package com.example.homehealth.ui.screens.reminders
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +41,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,12 +51,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavHostController
 import com.example.homehealth.R
 import com.example.homehealth.data.local.entity.FamilyMember
@@ -60,7 +68,11 @@ import com.example.homehealth.ui.components.DropdownSelector
 import com.example.homehealth.ui.components.memberPickerLabel
 import com.example.homehealth.util.CalendarEventHelper
 import com.example.homehealth.util.DateUtils
+import com.example.homehealth.worker.MedicationAlarmScheduler
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -78,8 +90,23 @@ fun RemindersScreen(
         mutableStateOf<com.example.homehealth.data.local.dao.ReminderWithMemberName?>(null)
     }
     val snackbarHostState = remember { SnackbarHostState() }
+    val calendarDeniedText = stringResource(R.string.reminders_calendar_denied)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var exactAvailable by remember { mutableStateOf(MedicationAlarmScheduler.exactAvailable(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                exactAvailable = MedicationAlarmScheduler.exactAvailable(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.errors.collect { snackbarHostState.showSnackbar(it) }
+    }
 
     // 待写入日历的提醒（权限通过后继续执行）
     var pendingCalendarTarget by remember {
@@ -97,7 +124,7 @@ fun RemindersScreen(
             )
         } else {
             scope.launch {
-                snackbarHostState.showSnackbar(context.getString(R.string.reminders_calendar_denied))
+                snackbarHostState.showSnackbar(calendarDeniedText)
             }
         }
     }
@@ -164,6 +191,21 @@ fun RemindersScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (!exactAvailable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    item {
+                        Column {
+                            Text(stringResource(R.string.reminders_exact_alarm_needed))
+                            OutlinedButton(onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(
+                                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                        Uri.parse("package:${context.packageName}")
+                                    ))
+                                }
+                            }) { Text(stringResource(R.string.reminders_exact_alarm_grant)) }
+                        }
+                    }
+                }
                 items(state.reminders, key = { it.reminder.id }) { item ->
                     ReminderCard(
                         item = item,
@@ -268,7 +310,7 @@ private fun ReminderCard(
                     .padding(top = 4.dp)
             ) {
                 // 写入系统日历（每日重复 + 提前提醒）
-                OutlinedButton(onClick = onExportCalendar) {
+                OutlinedButton(onClick = onExportCalendar, enabled = item.reminder.active) {
                     Icon(
                         Icons.Filled.DateRange,
                         contentDescription = null,
@@ -305,34 +347,37 @@ private fun writeReminderToCalendar(
     item: com.example.homehealth.data.local.dao.ReminderWithMemberName
 ) {
     scope.launch {
+        var newEventIds = emptyList<Long>()
         try {
             val isRewrite = item.reminder.calendarEventIdList().isNotEmpty()
-            val eventIds = withContext(Dispatchers.IO) {
-                // 重复写入时先删除旧日历事件（按记录 ID + 签名兜底，覆盖历史遗留事件）
-                if (isRewrite || item.reminder.calendarEventIds != null) {
-                    runCatching {
-                        CalendarEventHelper.deleteMedicationEvents(
-                            context = context,
-                            medicationName = item.reminder.medicationName,
-                            memberName = item.memberName,
-                            storedEventIds = item.reminder.calendarEventIdList()
-                        )
-                    }
-                }
+            newEventIds = withContext(Dispatchers.IO) {
                 CalendarEventHelper.insertMedicationEvents(
                     context = context,
                     medicationName = item.reminder.medicationName,
                     dosage = item.reminder.dosage,
                     memberName = item.memberName,
-                    times = item.reminder.dailyTimes()
+                    times = item.reminder.dailyTimes(),
+                    reminderId = item.reminder.id
                 )
             }
-            if (eventIds.isEmpty()) {
+            if (newEventIds.isEmpty()) {
                 snackbarHostState.showSnackbar(context.getString(R.string.reminders_calendar_invalid))
                 return@launch
             }
+            withContext(Dispatchers.IO) {
+                CalendarEventHelper.deleteMedicationEvents(
+                    context = context,
+                    medicationName = item.reminder.medicationName,
+                    memberName = item.memberName,
+                    storedEventIds = item.reminder.calendarEventIdList(),
+                    reminderId = item.reminder.id,
+                    protectedEventIds = newEventIds
+                )
+            }
             // 持久化事件 ID，删除提醒时据此同步清理日历
-            viewModel.updateCalendarEventIds(item.reminder, eventIds)
+            viewModel.updateCalendarEventIds(item.reminder, newEventIds)
+            val eventCount = newEventIds.size
+            newEventIds = emptyList()
             val refreshed = context.getString(
                 if (isRewrite) R.string.reminders_calendar_updated
                 else R.string.reminders_calendar_new
@@ -340,10 +385,14 @@ private fun writeReminderToCalendar(
             snackbarHostState.showSnackbar(
                 context.getString(
                     R.string.reminders_calendar_done,
-                    item.reminder.medicationName, eventIds.size, refreshed
+                    item.reminder.medicationName, eventCount, refreshed
                 )
             )
         } catch (e: Exception) {
+            if (newEventIds.isNotEmpty()) withContext(NonCancellable + Dispatchers.IO) {
+                runCatching { CalendarEventHelper.deleteCalendarEvents(context, newEventIds) }
+            }
+            if (e is CancellationException) throw e
             snackbarHostState.showSnackbar(
                 context.getString(R.string.reminders_calendar_failed, e.message ?: "")
             )
@@ -429,8 +478,9 @@ private fun ReminderEditDialog(
             TextButton(onClick = {
                 val member = memberOptions.firstOrNull { it.second == memberLabel }?.first
                 val times = timesText.split("，", ",").map { it.trim() }
-                    .filter { it.matches(Regex("\\d{1,2}:\\d{2}")) }
-                if (name.isBlank() || member == null || times.isEmpty()) {
+                    .filter { it.isNotEmpty() }
+                if (name.isBlank() || member == null || times.isEmpty() ||
+                    times.any { !MedicationReminder.isValidTime(it) }) {
                     error = true
                 } else {
                     onSave(member.id, name.trim(), dosage.trim().ifBlank { defaultDosage }, times)

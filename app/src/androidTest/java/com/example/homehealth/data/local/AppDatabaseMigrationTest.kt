@@ -43,9 +43,9 @@ class AppDatabaseMigrationTest {
         FrameworkSQLiteOpenHelperFactory()
     )
 
-    /** 完整迁移链 v4 → v8（这是 schema 快照可追溯的最远起点） */
+    /** 完整迁移链 v4 → v9（这是 schema 快照可追溯的最远起点） */
     @Test
-    fun migrate4To8_keepsDataAndMatchesSchema() {
+    fun migrate4To9_keepsDataAndMatchesSchema() {
         // v4 建库并写入数据（只写各版本都存在的列，不依赖后续新增字段）
         helper.createDatabase(TEST_DB, 4).let { db ->
             insertSampleData(db)
@@ -54,12 +54,13 @@ class AppDatabaseMigrationTest {
 
         val db = helper.runMigrationsAndValidate(
             TEST_DB,
-            8,
+            9,
             true,
             DatabaseModule.MIGRATION_4_5,
             DatabaseModule.MIGRATION_5_6,
             DatabaseModule.MIGRATION_6_7,
-            DatabaseModule.MIGRATION_7_8
+            DatabaseModule.MIGRATION_7_8,
+            DatabaseModule.MIGRATION_8_9
         )
 
         assertEquals(1, db.countOf("family_members"))
@@ -85,6 +86,19 @@ class AppDatabaseMigrationTest {
         assertTrue(db.hasColumn("alerts", "metricType"))
         assertTrue(db.hasColumn("alerts", "baselineText"))
         assertTrue(db.hasColumn("qa_history", "imagePath"))
+        assertTrue(db.hasColumn("medical_documents", "rawText"))
+        assertTrue(db.hasColumn("medical_documents", "normalizationNotesJson"))
+        db.close()
+    }
+
+    @Test
+    fun migrate8To9_alone_isValid() {
+        helper.createDatabase(TEST_DB_89, 8).close()
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB_89, 9, true, DatabaseModule.MIGRATION_8_9
+        )
+        assertTrue(db.hasColumn("medical_documents", "rawText"))
+        assertTrue(db.hasColumn("medical_documents", "normalizationNotesJson"))
         db.close()
     }
 
@@ -177,5 +191,6 @@ class AppDatabaseMigrationTest {
         const val TEST_DB = "migration-test.db"
         const val TEST_DB_67 = "migration-test-6-7.db"
         const val TEST_DB_78 = "migration-test-7-8.db"
+        const val TEST_DB_89 = "migration-test-8-9.db"
     }
 }

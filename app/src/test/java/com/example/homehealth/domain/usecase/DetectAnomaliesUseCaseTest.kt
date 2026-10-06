@@ -128,6 +128,15 @@ class DetectAnomaliesUseCaseTest {
     }
 
     @Test
+    fun `未换算的单位不参与标准区间判断`() {
+        val (created, alerts) = runDetection(records = listOf(
+            record(HealthTypes.BLOOD_GLUCOSE, "100", 100.0, "mg/dL", 1)
+        ))
+        assertEquals(0, created)
+        assertTrue(alerts.isEmpty())
+    }
+
+    @Test
     fun `参考边界值本身不报警（严格大于小于）`() {
         // 6.1 == high、3.9 == low：都不应触发
         val (high, _) = runDetection(records = listOf(record(HealthTypes.BLOOD_GLUCOSE, "6.1", 6.1, "mmol/L", 1)))
@@ -239,6 +248,21 @@ class DetectAnomaliesUseCaseTest {
         val (created, alerts) = runDetection(records = records)
         assertEquals(0, created)
         assertTrue(alerts.isEmpty())
+    }
+
+    @Test
+    fun `区间读数与异单位读数不构成趋势`() {
+        val base = listOf(
+            record(HealthTypes.BLOOD_GLUCOSE, "5.8", 5.8, "mmol/L", 5),
+            record(HealthTypes.BLOOD_GLUCOSE, "5.2", 5.2, "mmol/L", 25),
+            record(HealthTypes.BLOOD_GLUCOSE, "4.6", 4.6, "mmol/L", 45)
+        )
+        assertEquals(0, runDetection(records = base.toMutableList().apply {
+            this[1] = this[1].copy(value = "<5.2", comparator = SchemaNormalizer.COMPARATOR_LT)
+        }).first)
+        assertEquals(0, runDetection(records = base.toMutableList().apply {
+            this[1] = this[1].copy(unit = "mg/dL")
+        }).first)
     }
 
     @Test

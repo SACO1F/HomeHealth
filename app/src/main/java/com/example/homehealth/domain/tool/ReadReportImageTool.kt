@@ -2,6 +2,7 @@ package com.example.homehealth.domain.tool
 
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 
 /**
  * 工具 ④：读取本轮附带的报告图片。
@@ -42,7 +43,7 @@ class ReadReportImageTool @Inject constructor(
             ?: return ToolResult.fail("本轮提问没有附带图片，无法读取。请先请用户提供报告图片。")
 
         val focus = ToolArgs.str(ToolArgs.parse(argsJson), "focus")
-        return runCatching {
+        return try {
             val text = vision.readImageText(
                 imageBase64 = image,
                 focus = focus,
@@ -53,7 +54,9 @@ class ReadReportImageTool @Inject constructor(
             } else {
                 ToolResult.ok(text)
             }
-        }.getOrElse { e ->
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             ToolResult.fail("读图失败：${e.message ?: e.javaClass.simpleName}")
         }
     }

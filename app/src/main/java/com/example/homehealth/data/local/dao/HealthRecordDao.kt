@@ -86,4 +86,7 @@ interface HealthRecordDao {
 
     @Query("DELETE FROM health_records WHERE memberId = :memberId")
     suspend fun deleteByMember(memberId: String)
+
+    @Query("DELETE FROM health_records WHERE sourceDocumentId = :documentId")
+    suspend fun deleteBySourceDocument(documentId: String)
 }

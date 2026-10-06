@@ -28,7 +28,7 @@ import com.example.homehealth.data.local.entity.QAHistory
         QAHistory::class,
         LlmCallLog::class
     ],
-    version = 8,
+    version = 10,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

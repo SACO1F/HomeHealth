@@ -107,11 +107,11 @@ HomeHealth 面向多成员家庭，是一款本地优先、隐私至上的 Andro
 
 **中文**：告警以**结构化事实**（指标 / 方向 / 数值 / 参考范围）落库，而非成品文案，展示时按当前语言现场渲染——切到英文后所有告警（含历史告警）都显示英文。基于 Android per-app locale 的中英文/跟随系统语言切换；浅色/深色/跟随系统主题模式；五大模块各持独立主题色，切换页面时整页色彩随动。
 
-### 8. 📅 Calendar two-way sync | 用药提醒与系统日历联动
+### 8. 💊 Timed medication reminders and calendar export | 按时用药提醒与日历导出
 
-**EN**: Reminders can be written into the system calendar with one tap (daily recurring events + 5-minute-ahead notifications). Deleting a reminder also cleans up its calendar events — dual-channel cleanup via stored event IDs plus a signature-based fallback for legacy events. No orphan calendar entries.
+**EN**: The app schedules a notification for each configured medication time. On Android 12+, exact timing requires the system's Alarms & reminders access; otherwise Android may delay the notification. Reminders can also be exported to the system calendar as daily events with 5-minute-ahead alerts. Editing, pausing or deleting an exported reminder updates or removes its calendar events.
 
-**中文**：提醒可一键写入系统日历（每日重复事件 + 提前 5 分钟通知），**删除提醒时日历日程同步清理**（事件 ID 精确删除 + 签名兜底双通道），不产生孤儿日程。
+**中文**：应用按每个设定的服药时刻安排通知。Android 12 及以上需要授予系统“闹钟和提醒”权限才能保证精确触发；未授予时通知可能延迟。也可将提醒导出到系统日历，生成每日重复事件和提前 5 分钟的日历通知。编辑、暂停或删除已导出的提醒时，会同步更新或清理日历事件。
 
 ### 9. 📡 Streaming answers, data basis first | 流式回答 · 数据依据先行
 
@@ -143,9 +143,9 @@ HomeHealth 面向多成员家庭，是一款本地优先、隐私至上的 Andro
 
 ## 🏗️ Tech Stack | 技术架构
 
-**EN**: Kotlin with coroutines & Flow · Jetpack Compose + Material 3 (single Activity + Navigation) · MVVM + Clean Architecture (`ui` / `domain` / `data`) · Hilt DI · Room v7 (progressive migrations) · OkHttp + Gson for LLM calls · WorkManager daily health checks · CalendarProvider integration. Built with AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26.
+**EN**: Kotlin with coroutines & Flow · Jetpack Compose + Material 3 (single Activity + Navigation) · MVVM + Clean Architecture (`ui` / `domain` / `data`) · Hilt DI · Room v9 (progressive migrations) · OkHttp + Gson for LLM calls · WorkManager daily health checks · AlarmManager medication notifications · CalendarProvider integration. Built with AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26.
 
-**中文**：Kotlin 协程 + Flow · Jetpack Compose + Material 3（单 Activity + Navigation）· MVVM + Clean Architecture（`ui` / `domain` / `data` 三层）· Hilt 依赖注入 · Room v7（渐进式迁移）· OkHttp + Gson（LLM 直连）· WorkManager 每日健康检查 · CalendarProvider 日历集成。基于 AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26 构建。
+**中文**：Kotlin 协程 + Flow · Jetpack Compose + Material 3（单 Activity + Navigation）· MVVM + Clean Architecture（`ui` / `domain` / `data` 三层）· Hilt 依赖注入 · Room v9（渐进式迁移）· OkHttp + Gson（LLM 直连）· WorkManager 每日健康检查 · AlarmManager 用药通知 · CalendarProvider 日历集成。基于 AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26 构建。
 
 ```
 ┌───────────────────────────────────────────┐

@@ -29,12 +29,20 @@ import com.example.homehealth.ui.theme.HighSeverity
 import com.example.homehealth.ui.theme.LowSeverity
 import com.example.homehealth.ui.theme.MediumSeverity
 import com.example.homehealth.util.DateUtils
+import com.example.homehealth.util.HealthTypes
 import java.io.File
 
 /** 当前应用语言是否为英文（per-app locale 生效后 Configuration 随之更新） */
 @Composable
 fun isEnglish(): Boolean =
     LocalConfiguration.current.locales[0]?.language == "en"
+
+/** 未收录的报告指标保留原名，避免 stringResource(0) 使页面崩溃。 */
+@Composable
+fun metricLabel(type: String): String {
+    val resId = HealthTypes.labelRes(type)
+    return if (resId != 0) stringResource(resId) else type
+}
 
 /** 严重程度徽章 */
 @Composable

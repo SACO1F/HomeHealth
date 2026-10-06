@@ -4,36 +4,24 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.homehealth.domain.repository.FamilyRepository
-import com.example.homehealth.domain.repository.MedicationReminderRepository
 import com.example.homehealth.domain.usecase.DetectAnomaliesUseCase
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
 /**
  * 每日健康检查任务：
- * 1. 为所有启用的用药提醒发送通知
- * 2. 对所有成员执行异常检测，汇总通知
+ * 对所有成员执行异常检测，汇总通知。
  */
 @HiltWorker
 class DailyCheckWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
-    private val medicationReminderRepository: MedicationReminderRepository,
-    private val familyRepository: FamilyRepository,
     private val detectAnomalies: DetectAnomaliesUseCase,
     private val notificationHelper: NotificationHelper
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
         return try {
-            // 用药提醒通知
-            val reminders = medicationReminderRepository.getActive()
-            for (reminder in reminders) {
-                val member = familyRepository.getMember(reminder.memberId) ?: continue
-                notificationHelper.showMedicationReminder(reminder, member.name)
-            }
-
             // 异常检测
             val created = detectAnomalies.invokeAll()
             if (created > 0) {

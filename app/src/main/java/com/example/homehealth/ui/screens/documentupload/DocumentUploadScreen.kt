@@ -75,6 +75,7 @@ fun DocumentUploadScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val savedDoneText = stringResource(R.string.upload_saved_done)
     var showRawText by remember { mutableStateOf(false) }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -105,7 +106,7 @@ fun DocumentUploadScreen(
     LaunchedEffect(state.phase) {
         when (state.phase) {
             UploadPhase.DONE -> {
-                snackbarHostState.showSnackbar(context.getString(R.string.upload_saved_done))
+                snackbarHostState.showSnackbar(savedDoneText)
                 viewModel.resetToIdle()
                 navController.popBackStack()
             }
@@ -139,7 +140,10 @@ fun DocumentUploadScreen(
             if (state.members.size > 1) {
                 item {
                     val memberOptions = state.members.map { it to memberPickerLabel(it.name, it.relationship) }
-                    com.example.homehealth.ui.components.DropdownSelector(
+                    if (state.currentDocument != null) {
+                        Text(memberOptions.firstOrNull { it.first.id == state.currentDocument?.memberId }
+                            ?.second.orEmpty())
+                    } else com.example.homehealth.ui.components.DropdownSelector(
                         options = memberOptions.map { it.second },
                         selected = memberOptions
                             .firstOrNull { it.first.id == state.selectedMemberId }
@@ -195,7 +199,8 @@ fun DocumentUploadScreen(
                                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                                     }
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                enabled = state.phase == UploadPhase.IDLE || state.phase == UploadPhase.ERROR
                             ) {
                                 Icon(
                                     Icons.Filled.PhotoCamera,
@@ -212,7 +217,8 @@ fun DocumentUploadScreen(
                                         )
                                     )
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                enabled = state.phase == UploadPhase.IDLE || state.phase == UploadPhase.ERROR
                             ) {
                                 Icon(
                                     Icons.Filled.PhotoLibrary,
@@ -258,15 +264,23 @@ fun DocumentUploadScreen(
             }
 
             // 错误提示
-            if (state.phase == UploadPhase.ERROR && state.errorMessage != null) {
+            if (state.errorMessage != null) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            state.errorMessage ?: "",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                state.errorMessage ?: "",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            if (state.phase == UploadPhase.ERROR) {
+                                viewModel.pendingCameraUri?.let { source ->
+                                    TextButton(onClick = { viewModel.onImageReady(source) }) {
+                                        Text(stringResource(R.string.upload_retry_save))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -372,10 +386,10 @@ private fun EditableRecordCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val typeOptions = HealthTypes.ALL.map { it to stringResource(HealthTypes.labelRes(it)) }
+                val typeOptions = HealthTypes.ALL.map { it to com.example.homehealth.ui.components.metricLabel(it) }
                 com.example.homehealth.ui.components.DropdownSelector(
                     options = typeOptions.map { it.second },
-                    selected = stringResource(HealthTypes.labelRes(record.type)),
+                    selected = com.example.homehealth.ui.components.metricLabel(record.type),
                     label = stringResource(R.string.upload_metric_label),
                     onSelect = { label ->
                         val type = typeOptions.first { it.second == label }.first

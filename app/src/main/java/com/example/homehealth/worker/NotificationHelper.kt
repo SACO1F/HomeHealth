@@ -62,18 +62,17 @@ class NotificationHelper @Inject constructor(
     }
 
     /** 用药提醒通知 */
-    fun showMedicationReminder(reminder: MedicationReminder, memberName: String) {
+    fun showMedicationReminder(reminder: MedicationReminder, memberName: String, time: String) {
         if (!canNotify()) return
-        val times = reminder.dailyTimes().joinToString("、").ifBlank { "每日" }
         val notification = NotificationCompat.Builder(context, NotifConstants.CHANNEL_MEDICATION)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("用药提醒：${reminder.medicationName}")
-            .setContentText("$memberName · ${reminder.dosage} · $times")
+            .setContentTitle(context.getString(R.string.notification_medication_title, reminder.medicationName))
+            .setContentText(context.getString(R.string.notification_medication_body, memberName, reminder.dosage, time))
             .setContentIntent(contentIntent())
             .setAutoCancel(true)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(reminder.id.hashCode(), notification)
+            NotificationManagerCompat.from(context).notify("${reminder.id}|$time".hashCode(), notification)
         } catch (_: SecurityException) {
         }
     }
@@ -83,8 +82,8 @@ class NotificationHelper @Inject constructor(
         if (count <= 0 || !canNotify()) return
         val notification = NotificationCompat.Builder(context, NotifConstants.CHANNEL_HEALTH)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("健康预警")
-            .setContentText("检测到 $count 条新的异常预警，请打开应用查看详情")
+            .setContentTitle(context.getString(R.string.notification_health_title))
+            .setContentText(context.getString(R.string.notification_health_body, count))
             .setContentIntent(contentIntent())
             .setAutoCancel(true)
             .build()

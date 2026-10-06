@@ -20,6 +20,9 @@ import com.example.homehealth.util.SchemaNormalizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -124,6 +127,7 @@ class DocumentUploadViewModel @Inject constructor(
     }
 
     fun selectMember(memberId: String) {
+        if (internal.value.currentDocument != null) return
         selectedMemberId.value = memberId
         internal.update { it.copy(selectedMemberId = memberId) }
     }
@@ -141,6 +145,7 @@ class DocumentUploadViewModel @Inject constructor(
 
     /** 拍照/选图完成：保存文件、创建文档并开始解析 */
     fun onImageReady(uri: Uri) {
+        if (internal.value.phase !in listOf(UploadPhase.IDLE, UploadPhase.ERROR)) return
         val memberId = selectedMemberId.value
         if (memberId.isBlank()) return
         viewModelScope.launch {
@@ -166,7 +171,8 @@ class DocumentUploadViewModel @Inject constructor(
                 }
                 parseInternal(document)
             } catch (e: Exception) {
-                cleanupSource(uri)
+                if (e is CancellationException) throw e
+                // 复制失败时保留拍照原图，避免存储不足等异常导致唯一原件丢失。
                 internal.update {
                     it.copy(
                         phase = UploadPhase.ERROR,
@@ -241,6 +247,12 @@ class DocumentUploadViewModel @Inject constructor(
                 )
             }
         } catch (t: Throwable) {
+            if (t is CancellationException) {
+                withContext(NonCancellable) {
+                    runCatching { documentRepository.markFailed(document, "解析已取消，请重试") }
+                }
+                throw t
+            }
             // 捕获 Throwable 而非 Exception：OutOfMemoryError 等错误也转为失败态，避免闪退
             val msg = if (t is OutOfMemoryError) {
                 appContext.getString(R.string.vm_upload_oom)
@@ -274,11 +286,12 @@ class DocumentUploadViewModel @Inject constructor(
     /** 确认保存：入库 + 异常检测 */
     fun confirmRecords() {
         val document = internal.value.currentDocument ?: return
-        val memberId = selectedMemberId.value
+        if (internal.value.phase != UploadPhase.PARSED) return
+        val memberId = document.memberId
         val editable = internal.value.editableRecords
         if (memberId.isBlank() || editable.isEmpty()) return
         viewModelScope.launch {
-            internal.update { it.copy(phase = UploadPhase.CONFIRMING) }
+            internal.update { it.copy(phase = UploadPhase.CONFIRMING, errorMessage = null) }
             val records = editable.map { e ->
                 // 血压形如 "120/80"，取收缩压作为主数值；
                 // 其余（含区间型 "<0.1" / ">100"）统一用比较符解析，符号从当前文本重新推导
@@ -286,7 +299,7 @@ class DocumentUploadViewModel @Inject constructor(
                 val primary = e.value.split("/").firstOrNull()?.trim().orEmpty()
                 val (comparator, numeric) = SchemaNormalizer.parseComparator(primary)
                 HealthRecord(
-                    id = UUID.randomUUID().toString(),
+                    id = e.id,
                     memberId = memberId,
                     type = e.type,
                     value = e.value.trim(),
@@ -297,9 +310,23 @@ class DocumentUploadViewModel @Inject constructor(
                     comparator = comparator
                 )
             }
-            documentRepository.confirmRecords(document, records)
-            detectAnomalies(memberId)
-            internal.update { it.copy(phase = UploadPhase.DONE) }
+            try {
+                documentRepository.confirmRecords(
+                    document, records,
+                    editable.mapNotNull { e -> e.normalizationNote?.let { e.id to it } }.toMap()
+                )
+                // 记录已原子提交；检测失败时不让用户再次确认并重复提交。
+                try { detectAnomalies(memberId) }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { }
+                internal.update { it.copy(phase = UploadPhase.DONE, errorMessage = null) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                internal.update {
+                    it.copy(phase = UploadPhase.PARSED, errorMessage = e.message ?: "保存失败，请重试")
+                }
+            }
         }
     }
 

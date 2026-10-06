@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -60,11 +62,12 @@ import com.example.homehealth.R
 import com.example.homehealth.data.local.entity.QAHistory
 import com.example.homehealth.ui.components.MarkdownText
 import com.example.homehealth.ui.components.memberPickerLabel
+import com.example.homehealth.ui.navigation.FLOATING_NAV_RESERVE
 import com.example.homehealth.util.DateUtils
 import java.io.File
 
 /** 健康问答页：聊天式界面，基于成员健康数据回答 */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun QAScreen(
     navController: NavHostController,
@@ -230,11 +233,15 @@ fun QAScreen(
                 }
             }
 
-            // 输入栏（紧凑：48dp 高 + 14sp 文字；imePadding 使其始终位于输入法之上）
+            // 输入栏（紧凑：48dp 高 + 14sp 文字；imePadding 使其始终位于输入法之上）。
+            // 悬浮底部导航栏不再预留 Scaffold 空间：键盘收起时输入栏需主动避让
+            // （键盘弹出时导航栏隐藏，避让随之取消，输入栏贴平键盘上沿）
+            val imeOpen = WindowInsets.isImeVisible
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(bottom = if (imeOpen) 0.dp else FLOATING_NAV_RESERVE),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(

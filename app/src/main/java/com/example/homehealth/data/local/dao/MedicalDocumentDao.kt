@@ -37,6 +37,9 @@ interface MedicalDocumentDao {
     @Query("UPDATE medical_documents SET parseStatus = :status, errorMessage = :error WHERE id = :id")
     suspend fun updateStatus(id: String, status: ParseStatus, error: String?)
 
+    @Query("UPDATE medical_documents SET rawText = :rawText WHERE id = :id")
+    suspend fun updateRawText(id: String, rawText: String)
+
     @Delete
     suspend fun delete(document: MedicalDocument)
 
