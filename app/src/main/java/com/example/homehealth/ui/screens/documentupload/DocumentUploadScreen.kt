@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -63,6 +64,8 @@ import com.example.homehealth.ui.components.ParseStatusBadge
 import com.example.homehealth.ui.components.memberPickerLabel
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.util.HealthTypes
+import com.example.homehealth.ui.components.FloatingCard
+import com.example.homehealth.ui.components.AppleIconButton
 import java.io.File
 
 /** 文档上传页：拍照/相册选择 → 解析 → 编辑确认 → 入库 */
@@ -121,7 +124,7 @@ fun DocumentUploadScreen(
             androidx.compose.material3.TopAppBar(
                 title = { Text(stringResource(R.string.upload_title)) },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    AppleIconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 }
@@ -132,7 +135,9 @@ fun DocumentUploadScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                // 二级页没有悬浮导航栏，内容直接避让系统导航栏
+                .navigationBarsPadding(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -159,7 +164,7 @@ fun DocumentUploadScreen(
 
             // 图片预览
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         if (state.imagePath != null) {
                             AsyncImage(
@@ -237,7 +242,7 @@ fun DocumentUploadScreen(
                 state.phase == UploadPhase.CONFIRMING
             ) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    FloatingCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
                                 when (state.phase) {
@@ -266,7 +271,7 @@ fun DocumentUploadScreen(
             // 错误提示
             if (state.errorMessage != null) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    FloatingCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
                                 state.errorMessage ?: "",
@@ -345,7 +350,7 @@ fun DocumentUploadScreen(
                     }
                     if (showRawText) {
                         item {
-                            Card(modifier = Modifier.fillMaxWidth()) {
+                            FloatingCard(modifier = Modifier.fillMaxWidth()) {
                                 Text(
                                     state.rawText,
                                     style = MaterialTheme.typography.labelMedium,
@@ -383,7 +388,7 @@ private fun EditableRecordCard(
     onChange: (EditableRecord) -> EditableRecord,
     onRemove: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FloatingCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val typeOptions = HealthTypes.ALL.map { it to com.example.homehealth.ui.components.metricLabel(it) }
@@ -397,7 +402,7 @@ private fun EditableRecordCard(
                     },
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onRemove) {
+                AppleIconButton(onClick = onRemove) {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = stringResource(R.string.common_delete),
@@ -447,7 +452,7 @@ private fun DocumentHistoryRow(
     document: MedicalDocument,
     onRetry: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FloatingCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically

@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
@@ -66,9 +68,15 @@ import com.example.homehealth.data.local.entity.FamilyMember
 import com.example.homehealth.data.local.entity.MedicationReminder
 import com.example.homehealth.ui.components.DropdownSelector
 import com.example.homehealth.ui.components.memberPickerLabel
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
+import com.example.homehealth.ui.navigation.FLOATING_NAV_RESERVE
+import com.example.homehealth.ui.navigation.floatingListBottomPadding
 import com.example.homehealth.util.CalendarEventHelper
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.worker.MedicationAlarmScheduler
+import com.example.homehealth.ui.components.FloatingCard
+import com.example.homehealth.ui.components.AppleIconButton
+import com.example.homehealth.ui.components.AppleOutlinedButton
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -155,7 +163,19 @@ fun RemindersScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
+            FloatingActionButton(
+                // 抬到悬浮底部导航栏之上：Scaffold 的 FAB 默认贴底，会被浮层导航栏遮住。
+                // navigationBarsPadding 单独避让系统导航栏（NavHost 层不再统一补该 inset）。
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = FLOATING_NAV_RESERVE),
+                // 圆角与底部悬浮导航栏一致（FLOATING_CORNER）
+                shape = RoundedCornerShape(FLOATING_CORNER),
+                // 半透明底 + 模块主题色图标，与悬浮导航栏同一套观感
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                onClick = { showAddDialog = true }
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.reminders_add_cd))
             }
         }
@@ -187,7 +207,8 @@ fun RemindersScreen(
                     .fillMaxSize()
                     .padding(padding),
                 contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp
+                    start = 16.dp, end = 16.dp, top = 8.dp,
+                    bottom = floatingListBottomPadding()
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -263,7 +284,7 @@ private fun ReminderCard(
     onToggle: () -> Unit,
     onExportCalendar: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FloatingCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -310,7 +331,11 @@ private fun ReminderCard(
                     .padding(top = 4.dp)
             ) {
                 // 写入系统日历（每日重复 + 提前提醒）
-                OutlinedButton(onClick = onExportCalendar, enabled = item.reminder.active) {
+                // iOS 风格：无灰色水波纹，按下只把内容压暗（圆角 / 描边与悬浮层一致）
+                AppleOutlinedButton(
+                    onClick = onExportCalendar,
+                    enabled = item.reminder.active
+                ) {
                     Icon(
                         Icons.Filled.DateRange,
                         contentDescription = null,
@@ -319,14 +344,14 @@ private fun ReminderCard(
                     Text(stringResource(R.string.reminders_write_calendar))
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onEdit) {
+                AppleIconButton(onClick = onEdit) {
                     Icon(
                         Icons.Filled.Edit,
                         contentDescription = stringResource(R.string.common_edit),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = onDelete) {
+                AppleIconButton(onClick = onDelete) {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = stringResource(R.string.common_delete),

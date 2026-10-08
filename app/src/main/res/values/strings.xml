@@ -259,6 +259,10 @@
     <string name="qa_tools_hide">已调用 %1$d 个工具，收起过程</string>
     <string name="qa_input_hint">输入健康问题…</string>
     <string name="qa_send_cd">发送</string>
+    <string name="qa_copy">复制</string>
+    <string name="qa_share">转发</string>
+    <string name="qa_copy_share_title">复制 / 转发</string>
+    <string name="qa_copy_share_hint">长按可选中部分文字；未选中时使用全文</string>
     <string name="qa_sources">来源：\n%1$s</string>
     <string name="qa_thinking_show">查看思考过程</string>
     <string name="qa_thinking_hide">收起思考过程</string>

@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
@@ -47,9 +49,15 @@ import com.example.homehealth.data.local.entity.HealthRecord
 import com.example.homehealth.ui.components.MemberAvatar
 import com.example.homehealth.ui.components.MemberEditDialog
 import com.example.homehealth.ui.components.relationshipLabel
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
+import com.example.homehealth.ui.navigation.FLOATING_NAV_RESERVE
+import com.example.homehealth.ui.navigation.floatingListBottomPadding
 import com.example.homehealth.ui.navigation.Routes
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.util.HealthTypes
+import com.example.homehealth.ui.components.FloatingCard
+import com.example.homehealth.ui.components.noRippleClickable
+import com.example.homehealth.ui.components.AppleIconButton
 
 /** 家庭列表页：成员卡片 + 添加成员 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,7 +76,7 @@ fun FamilyListScreen(
             androidx.compose.material3.TopAppBar(
                 title = { Text(stringResource(R.string.family_app_title)) },
                 actions = {
-                    IconButton(onClick = { navController.navigate(Routes.SETTINGS) }) {
+                    AppleIconButton(onClick = { navController.navigate(Routes.SETTINGS) }) {
                         Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.nav_settings))
                     }
                 }
@@ -76,6 +84,16 @@ fun FamilyListScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
+                // 抬到悬浮底部导航栏之上：Scaffold 的 FAB 默认贴底，会被浮层导航栏遮住。
+                // navigationBarsPadding 单独避让系统导航栏（NavHost 层不再统一补该 inset）。
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = FLOATING_NAV_RESERVE),
+                // 圆角与底部悬浮导航栏一致（FLOATING_CORNER）
+                shape = RoundedCornerShape(FLOATING_CORNER),
+                // 半透明底 + 模块主题色图标 / 文字，与悬浮导航栏同一套观感
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                contentColor = MaterialTheme.colorScheme.primary,
                 onClick = { showAddDialog = true },
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 text = { Text(stringResource(R.string.family_add_member)) }
@@ -109,7 +127,8 @@ fun FamilyListScreen(
                     .fillMaxSize()
                     .padding(padding),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp
+                    start = 16.dp, end = 16.dp, top = 8.dp,
+                    bottom = floatingListBottomPadding()
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -136,10 +155,12 @@ fun FamilyListScreen(
 
 @Composable
 private fun MemberCard(card: MemberCardUi, onClick: () -> Unit) {
-    Card(
+    FloatingCard(
+        shape = RoundedCornerShape(FLOATING_CORNER),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            // 无水波纹：按下不叠灰色方块，卡片样式全程与悬浮卡片一致
+            .noRippleClickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),

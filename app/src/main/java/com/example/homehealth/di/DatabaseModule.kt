@@ -75,7 +75,7 @@ object DatabaseModule {
     /**
      * v6 → v7（保留已有数据）：
      * ① 新增 `llm_call_logs` 表 —— LLM 调用可观测性（耗时 / 字符数 / 重试次数 / 失败类型）；
-     * ② `alerts` 新增 5 列结构化字段 —— 让告警能按当前语言在展示层渲染，
+     * ② `alerts` 新增 7 列结构化字段 —— 让告警能按当前语言在展示层渲染，
      *    而不是把成品文案在写入时固化进数据库。
      *
      * `llm_call_logs` 的 DDL 需与 Room 生成的 schema（app/schemas/7.json）**逐字一致**，

@@ -19,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -30,6 +31,7 @@ import com.example.homehealth.data.SettingsPrefs
 import com.example.homehealth.ui.navigation.RootApp
 import com.example.homehealth.ui.screens.consent.ConsentScreen
 import com.example.homehealth.ui.theme.HomeHealthTheme
+import com.example.homehealth.worker.DailyCheckScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -76,6 +78,8 @@ class MainActivity : AppCompatActivity() {
                     ConsentScreen(
                         onAccept = {
                             settingsPrefs.acceptConsent()
+                            // 同意之后才调度每日健康检查（同意前不进行任何健康数据处理/通知）
+                            DailyCheckScheduler.schedule(this@MainActivity)
                             consented = true
                         },
                         // 不同意即退出：SplashActivity 已出栈，finish 后应用关闭
@@ -106,7 +110,8 @@ class MainActivity : AppCompatActivity() {
 @Composable
 private fun RequestNotificationPermissionOnce() {
     val context = LocalContext.current
-    var requested by remember { mutableStateOf(false) }
+    // rememberSaveable：配置变更（旋转）后不再重复弹权限框
+    var requested by rememberSaveable { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }

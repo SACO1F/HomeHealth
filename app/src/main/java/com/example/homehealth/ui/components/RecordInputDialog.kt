@@ -1,9 +1,11 @@
 package com.example.homehealth.ui.components
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -20,10 +22,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.homehealth.R
 import com.example.homehealth.data.local.entity.HealthRecord
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
 import com.example.homehealth.util.HealthTypes
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,6 +84,14 @@ fun RecordInputDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        // 与底部悬浮导航栏同一套观感：半透明底 + 大圆角 + 外圈阴影
+        // （本主题 surface == background，只给半透明底而不给阴影会看起来「全透明」）
+        modifier = Modifier.shadow(
+            elevation = 12.dp,
+            shape = RoundedCornerShape(FLOATING_CORNER)
+        ),
+        shape = RoundedCornerShape(FLOATING_CORNER),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         title = {
             Text(
                 when {
@@ -90,7 +102,11 @@ fun RecordInputDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // 表单内容变化（如切换到血压、出现错误提示）时高度平滑过渡，而不是生硬跳变
+            Column(
+                modifier = Modifier.animateContentSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 // 未锁定类型时可选指标（49 项标准指标体系）
                 if (!typeLocked) {
                     val typeOptions = HealthTypes.ALL.map { it to metricLabel(it) }
@@ -112,6 +128,8 @@ fun RecordInputDialog(
                             label = { Text(stringResource(R.string.record_systolic)) },
                             isError = error,
                             singleLine = true,
+                            // 圆角与底部悬浮导航栏一致
+                            shape = RoundedCornerShape(FLOATING_CORNER),
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
@@ -120,6 +138,8 @@ fun RecordInputDialog(
                             label = { Text(stringResource(R.string.record_diastolic)) },
                             isError = error,
                             singleLine = true,
+                            // 圆角与底部悬浮导航栏一致
+                            shape = RoundedCornerShape(FLOATING_CORNER),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -130,10 +150,16 @@ fun RecordInputDialog(
                         label = { Text(stringResource(R.string.record_value_unit, HealthTypes.unit(selectedType))) },
                         isError = error,
                         singleLine = true,
+                        // 圆角与底部悬浮导航栏一致
+                        shape = RoundedCornerShape(FLOATING_CORNER),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                OutlinedButton(onClick = { showDatePicker = true }) {
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    // 圆角与底部悬浮导航栏一致
+                    shape = RoundedCornerShape(FLOATING_CORNER)
+                ) {
                     Text(stringResource(R.string.record_measure_date, dateText))
                 }
                 OutlinedTextField(
@@ -141,6 +167,8 @@ fun RecordInputDialog(
                     onValueChange = { notes = it },
                     label = { Text(stringResource(R.string.record_notes_label)) },
                     singleLine = true,
+                    // 圆角与底部悬浮导航栏一致
+                    shape = RoundedCornerShape(FLOATING_CORNER),
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (error) {

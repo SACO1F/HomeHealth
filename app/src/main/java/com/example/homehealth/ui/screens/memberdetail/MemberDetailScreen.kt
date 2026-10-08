@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -57,10 +59,15 @@ import com.example.homehealth.ui.components.genderLabel
 import com.example.homehealth.ui.components.relationshipLabel
 import com.example.homehealth.ui.components.relativeTime
 import com.example.homehealth.ui.components.smokingLabel
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
 import com.example.homehealth.ui.navigation.Routes
+import com.example.homehealth.ui.navigation.floatingListBottomPadding
 import com.example.homehealth.ui.navigation.navigateToTopLevel
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.util.HealthTypes
+import com.example.homehealth.ui.components.FloatingCard
+import com.example.homehealth.ui.components.noRippleClickable
+import com.example.homehealth.ui.components.AppleIconButton
 
 /** 个人档案页：指标概览 + 最近记录 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,19 +90,19 @@ fun MemberDetailScreen(
             androidx.compose.material3.TopAppBar(
                 title = { Text(member?.name ?: stringResource(R.string.detail_title_default)) },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    AppleIconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
                 actions = {
                     // 编辑个人信息
-                    IconButton(
+                    AppleIconButton(
                         onClick = { showEditDialog = true },
                         enabled = member != null
                     ) {
                         Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.detail_edit_cd))
                     }
-                    IconButton(onClick = { navController.navigateToTopLevel(Routes.ALERTS) }) {
+                    AppleIconButton(onClick = { navController.navigateToTopLevel(Routes.ALERTS) }) {
                         Icon(Icons.Filled.Notifications, contentDescription = stringResource(R.string.detail_alerts_cd))
                         if (unreadAlerts > 0) Badge { Text("$unreadAlerts") }
                     }
@@ -104,6 +111,13 @@ fun MemberDetailScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
+                // NavHost 层不再统一补导航栏 inset，FAB 需自行避让系统导航栏
+                modifier = Modifier.navigationBarsPadding(),
+                // 圆角与底部悬浮导航栏一致（FLOATING_CORNER）
+                shape = RoundedCornerShape(FLOATING_CORNER),
+                // 半透明底 + 模块主题色图标 / 文字，与悬浮导航栏同一套观感
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                contentColor = MaterialTheme.colorScheme.primary,
                 onClick = { navController.navigate(Routes.upload(viewModel.memberId)) },
                 icon = { Icon(Icons.Filled.CloudUpload, contentDescription = null) },
                 text = { Text(stringResource(R.string.detail_upload_report)) }
@@ -114,12 +128,17 @@ fun MemberDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 8.dp, bottom = floatingListBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 成员信息头
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(
+                    shape = RoundedCornerShape(FLOATING_CORNER),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Row(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -194,10 +213,11 @@ fun MemberDetailScreen(
             // 未读预警提示
             if (unreadAlerts > 0) {
                 item {
-                    Card(
+                    FloatingCard(
+                        shape = RoundedCornerShape(FLOATING_CORNER),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { navController.navigateToTopLevel(Routes.ALERTS) }
+                            .noRippleClickable { navController.navigateToTopLevel(Routes.ALERTS) }
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
@@ -313,10 +333,11 @@ private fun MetricCard(
     gender: String?,
     onClick: () -> Unit
 ) {
-    Card(
+    FloatingCard(
+        shape = RoundedCornerShape(FLOATING_CORNER),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .noRippleClickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -360,7 +381,10 @@ private fun MetricCard(
 
 @Composable
 private fun RecentRecordRow(record: HealthRecord) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FloatingCard(
+        shape = RoundedCornerShape(FLOATING_CORNER),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically

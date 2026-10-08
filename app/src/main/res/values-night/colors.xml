@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色模式下的窗口背景：与 Compose 主题 BackgroundDark（#0E1513）保持一致。
+         窗口背景只在 Compose 首帧之前可见；若深色模式下仍沿用浅色的 app_background，
+         冷启动/系统栏 inset 处会露出白条。 -->
+    <color name="app_background">#0E1513</color>
+</resources>

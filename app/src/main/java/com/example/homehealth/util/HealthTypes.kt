@@ -215,7 +215,14 @@ object HealthTypes {
 
     // ---- UI 本地化：指标名 / 分组名的字符串资源 ----
 
-    /** 指标名字符串资源 id（UI 显示用；数据层与 LLM 请继续用 [label]） */
+    /**
+     * 指标名字符串资源 id（UI 显示用；数据层与 LLM 请继续用 [label]）。
+     *
+     * ⚠️ **字典外类型返回 0**，直接 `stringResource(labelRes(type))` 会抛
+     * `Resources$NotFoundException`。UI 一律用带兜底的
+     * `ui/components/CommonComponents.metricLabel(type)`，不要直接调用本方法。
+     * 覆盖性由 `HealthTypesTest` 守住（每个已定义指标都必须有资源）。
+     */
     fun labelRes(type: String): Int = when (type) {
         BLOOD_PRESSURE -> R.string.metric_blood_pressure
         HEART_RATE -> R.string.metric_heart_rate

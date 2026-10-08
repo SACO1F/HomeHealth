@@ -143,9 +143,9 @@ HomeHealth 面向多成员家庭，是一款本地优先、隐私至上的 Andro
 
 ## 🏗️ Tech Stack | 技术架构
 
-**EN**: Kotlin with coroutines & Flow · Jetpack Compose + Material 3 (single Activity + Navigation) · MVVM + Clean Architecture (`ui` / `domain` / `data`) · Hilt DI · Room v9 (progressive migrations) · OkHttp + Gson for LLM calls · WorkManager daily health checks · AlarmManager medication notifications · CalendarProvider integration. Built with AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26.
+**EN**: Kotlin with coroutines & Flow · Jetpack Compose + Material 3 (single Activity + Navigation) · MVVM + Clean Architecture (`ui` / `domain` / `data`) · Hilt DI · Room v10 (progressive migrations) · OkHttp + Gson for LLM calls · WorkManager daily health checks · AlarmManager medication notifications · CalendarProvider integration. Built with AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26.
 
-**中文**：Kotlin 协程 + Flow · Jetpack Compose + Material 3（单 Activity + Navigation）· MVVM + Clean Architecture（`ui` / `domain` / `data` 三层）· Hilt 依赖注入 · Room v9（渐进式迁移）· OkHttp + Gson（LLM 直连）· WorkManager 每日健康检查 · AlarmManager 用药通知 · CalendarProvider 日历集成。基于 AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26 构建。
+**中文**：Kotlin 协程 + Flow · Jetpack Compose + Material 3（单 Activity + Navigation）· MVVM + Clean Architecture（`ui` / `domain` / `data` 三层）· Hilt 依赖注入 · Room v10（渐进式迁移）· OkHttp + Gson（LLM 直连）· WorkManager 每日健康检查 · AlarmManager 用药通知 · CalendarProvider 日历集成。基于 AGP 9.3 / Kotlin 2.3 / compileSdk 37 / minSdk 26 构建。
 
 ```
 ┌───────────────────────────────────────────┐
@@ -195,9 +195,12 @@ The Room schema is exported to `app/schemas/` (committed), and **every version b
 | v4 → v5 | indices on `alerts(memberId)`、`health_records(memberId, type, recordDate)` |
 | v5 → v6 | `health_records.comparator`（承载 `<0.1` / `>100` 这类区间型结果） |
 | v6 → v7 | `llm_call_logs` 表（LLM 调用可观测性）+ `alerts` 7 列结构化告警字段 |
+| v7 → v8 | `qa_history.imagePath`（随提问附带的报告图片） |
+| v8 → v9 | `medical_documents.rawText` + `normalizationNotesJson`（解析原文与归一化说明，可审计） |
+| v9 → v10 | `family_members` 健康档案 8 列（血型 / 腰围 / 运动 / 饮食 / 吸烟 / 饮酒 / 慢性病史 / 手术史） |
 
 - `fallbackToDestructiveMigration()` is deliberately **not** used: a version jump fails loudly instead of silently wiping the user's health records — 刻意不使用破坏性迁移兜底：宁可启动失败也不静默清库
-- An instrumented `MigrationTestHelper` test validates the **v4→v7 chain and the v6→v7 single hop** against the exported schemas and asserts that data survives (`gradlew connectedDebugAndroidTest`, requires a device/emulator) — 插桩迁移测试对导出 schema 校验 v4→v7 全链与 v6→v7 单跳，并断言数据不丢
+- An instrumented `MigrationTestHelper` test validates the **v4→v10 chain and the v9→v10 single hop** against the exported schemas and asserts that data survives (`gradlew connectedDebugAndroidTest`, requires a device/emulator) — 插桩迁移测试对导出 schema 校验 v4→v10 全链与 v9→v10 单跳，并断言数据不丢
 - 18 JVM unit tests cover `SchemaNormalizer` — conversions, unit canonicalization, comparator handling — plus **structural assertions on the dictionaries themselves**: every alias must point to a defined metric, metric types must be unique, and sex-specific ranges must be well-formed with low < high — 18 条 JVM 单测覆盖归一化层（换算 / 单位 / 比较符），并对字典本身做结构性断言：别名必须指向已定义指标、指标类型不得重复、性别区间必须上下限合法
 - Index names must match Room's generated `index_<table>_<column>` **character for character**, or opening the database throws `IllegalStateException` — 索引名必须与 Room 的生成规则逐字一致
 - ⚠️ **After bumping the DB version, build twice**: the androidTest asset merge does not depend on the schema-generation task, so a newly added `<N>.json` can miss the test APK on the first build (compilation still succeeds — the test only fails at runtime) — 升版本后要构建两次，否则迁移测试会在运行时找不到 schema

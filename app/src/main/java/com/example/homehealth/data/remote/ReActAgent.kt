@@ -146,8 +146,10 @@ class ReActAgent @Inject constructor(
 
                 if (result.ok) {
                     failures[call.name] = 0
-                    // 检索类工具的返回就是「数据依据」的原文来源
-                    if (call.name in EVIDENCE_TOOL_NAMES) evidence += result.text
+                    // 检索类工具的返回就是「数据依据」的原文来源。
+                    // 必须与回填给模型的 observation 用同一条截断逻辑：否则超预算时
+                    // 「依据」会比模型实际看到的多，用户拿依据核对答案时对不上。
+                    if (call.name in EVIDENCE_TOOL_NAMES) evidence += truncateObservation(result.text)
                 } else {
                     val count = (failures[call.name] ?: 0) + 1
                     failures[call.name] = count

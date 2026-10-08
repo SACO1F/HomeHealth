@@ -1,7 +1,7 @@
 package com.example.homehealth.data.local
 
 /**
- * v4 → v9 迁移 SQL 的单一事实来源。
+ * v4 → v10 迁移 SQL 的单一事实来源。
  *
  * **为什么要抽出来**：Migration 对象只能在设备 / instrumentation 环境里执行，
  * SQL 字符串埋在 `migrate()` 方法体内，JVM 单测拿不到——结构级校验过去只能靠

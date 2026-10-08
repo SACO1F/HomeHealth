@@ -4,16 +4,12 @@ import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import com.example.homehealth.worker.DailyCheckWorker
+import com.example.homehealth.data.SettingsPrefs
+import com.example.homehealth.worker.DailyCheckScheduler
 import com.example.homehealth.worker.NotificationHelper
 import com.example.homehealth.worker.MedicationAlarmScheduler
 import com.example.homehealth.domain.repository.MedicationReminderRepository
 import dagger.hilt.android.HiltAndroidApp
-import java.util.Calendar
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +27,8 @@ class HomeHealthApp : Application(), Configuration.Provider {
 
     @Inject lateinit var medicationReminders: MedicationReminderRepository
 
+    @Inject lateinit var settingsPrefs: SettingsPrefs
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -39,7 +37,12 @@ class HomeHealthApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         notificationHelper.createChannels()
-        scheduleDailyCheck()
+        // 首启同意之前不调度任何会处理/通知健康数据的任务：
+        // 新装用户或同意版本号递增时，用户必须先看到说明并同意，才可能出现健康预警。
+        // 同意后由 MainActivity 在用户点「同意」时立即排期。
+        if (settingsPrefs.hasAcceptedConsent) {
+            DailyCheckScheduler.schedule(this)
+        }
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 medicationReminders.getAll().forEach {
@@ -49,26 +52,5 @@ class HomeHealthApp : Application(), Configuration.Provider {
                 Log.e("HomeHealthApp", "Failed to restore medication alarms", e)
             }
         }
-    }
-
-    /** 每日 8:00 执行异常检查；用药提醒独立按每个设定时刻调度。 */
-    private fun scheduleDailyCheck() {
-        val now = Calendar.getInstance()
-        val nextRun = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 8)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            if (before(now)) add(Calendar.DAY_OF_YEAR, 1)
-        }
-        val delay = nextRun.timeInMillis - now.timeInMillis
-        val request = PeriodicWorkRequestBuilder<DailyCheckWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-            .build()
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            DailyCheckWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            request
-        )
     }
 }

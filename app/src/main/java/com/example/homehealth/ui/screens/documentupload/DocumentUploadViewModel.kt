@@ -135,7 +135,8 @@ class DocumentUploadViewModel @Inject constructor(
     /** 准备拍照：生成目标文件 URI */
     fun prepareCameraCapture(context: android.content.Context): Uri? {
         val dir = java.io.File(context.filesDir, "documents").apply { mkdirs() }
-        val file = java.io.File(dir, "doc_${System.currentTimeMillis()}.jpg")
+        // UUID 而非毫秒时间戳：同一毫秒内连续两次拍照会撞名，覆盖掉前一张
+        val file = java.io.File(dir, "doc_${UUID.randomUUID()}.jpg")
         val uri = androidx.core.content.FileProvider.getUriForFile(
             context, "${context.packageName}.fileprovider", file
         )

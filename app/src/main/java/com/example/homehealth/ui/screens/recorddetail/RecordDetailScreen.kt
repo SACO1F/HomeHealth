@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -46,8 +48,12 @@ import com.example.homehealth.data.local.entity.HealthRecord
 import com.example.homehealth.ui.components.RecordInputDialog
 import com.example.homehealth.ui.components.StatItem
 import com.example.homehealth.ui.components.TrendLineChart
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
+import com.example.homehealth.ui.navigation.floatingListBottomPadding
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.util.HealthTypes
+import com.example.homehealth.ui.components.FloatingCard
+import com.example.homehealth.ui.components.AppleIconButton
 
 /** 指标详情页：趋势图 + 统计 + 历史记录 + 手动添加 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,14 +76,23 @@ fun RecordDetailScreen(
             androidx.compose.material3.TopAppBar(
                 title = { Text(label) },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    AppleIconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
+            FloatingActionButton(
+                // NavHost 层不再统一补导航栏 inset，FAB 需自行避让系统导航栏
+                modifier = Modifier.navigationBarsPadding(),
+                // 圆角与底部悬浮导航栏一致（FLOATING_CORNER）
+                shape = RoundedCornerShape(FLOATING_CORNER),
+                // 半透明底 + 模块主题色图标，与悬浮导航栏同一套观感
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                onClick = { showAddDialog = true }
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.record_add_cd))
             }
         }
@@ -86,12 +101,14 @@ fun RecordDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 8.dp, bottom = floatingListBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 趋势图
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             stringResource(R.string.record_detail_trend),
@@ -114,7 +131,7 @@ fun RecordDetailScreen(
             // 统计
             if (state.records.isNotEmpty()) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    FloatingCard(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -146,7 +163,7 @@ fun RecordDetailScreen(
                 )
             }
             items(state.records, key = { it.id }) { record ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -167,14 +184,14 @@ fun RecordDetailScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { editTarget = record }) {
+                        AppleIconButton(onClick = { editTarget = record }) {
                             Icon(
                                 Icons.Filled.Edit,
                                 contentDescription = stringResource(R.string.common_edit),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { deleteTarget = record }) {
+                        AppleIconButton(onClick = { deleteTarget = record }) {
                             Icon(
                                 Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.common_delete),

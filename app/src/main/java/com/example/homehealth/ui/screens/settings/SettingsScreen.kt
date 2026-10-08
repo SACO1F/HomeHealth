@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.QuestionAnswer
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,7 +35,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -65,10 +65,15 @@ import com.example.homehealth.data.remote.LlmProviders
 import com.example.homehealth.domain.model.LlmCallStats
 import com.example.homehealth.ui.components.MemberEditDialog
 import com.example.homehealth.ui.components.DropdownSelector
+import com.example.homehealth.ui.components.FloatingSegmentedControl
 import com.example.homehealth.ui.components.StatItem
 import com.example.homehealth.ui.components.relationshipLabel
+import com.example.homehealth.ui.navigation.floatingListBottomPadding
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
 import com.example.homehealth.util.DateUtils
 import com.example.homehealth.util.FileUtils
+import com.example.homehealth.ui.components.FloatingCard
+import com.example.homehealth.ui.components.AppleIconButton
 import kotlinx.coroutines.delay
 
 /** 设置页：成员管理 / 解析服务 / 数据导出 / 健康检查 / 关于 */
@@ -130,7 +135,9 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 16.dp, bottom = floatingListBottomPadding()
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ---- 家庭成员管理 ----
@@ -138,7 +145,10 @@ fun SettingsScreen(
                 SectionTitle(stringResource(R.string.settings_member_section))
             }
             items(members, key = { it.id }) { member ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(
+                    shape = RoundedCornerShape(FLOATING_CORNER),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -165,14 +175,14 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { editTarget = member }) {
+                        AppleIconButton(onClick = { editTarget = member }) {
                             Icon(
                                 Icons.Filled.Edit,
                                 contentDescription = stringResource(R.string.common_edit),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { deleteTarget = member }) {
+                        AppleIconButton(onClick = { deleteTarget = member }) {
                             Icon(
                                 Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.common_delete),
@@ -183,68 +193,58 @@ fun SettingsScreen(
                 }
             }
             item {
-                OutlinedButton(onClick = { showAddMember = true }) {
+                OutlinedButton(
+                    onClick = { showAddMember = true },
+                    // 圆角与底部悬浮导航栏一致
+                    shape = RoundedCornerShape(FLOATING_CORNER)
+                ) {
                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                     Text(stringResource(R.string.settings_add_member))
                 }
             }
 
-            // ---- 外观 ----
+            // ---- 外观：悬浮分段选择器（与底部导航栏同款外观 + 切换滑动） ----
             item {
-                SectionTitle(stringResource(R.string.settings_theme_section))
-            }
-            item {
-                ModeOptionCard(
-                    title = stringResource(R.string.settings_theme_system),
-                    desc = stringResource(R.string.settings_theme_system_desc),
-                    selected = themeMode == SettingsPrefs.THEME_SYSTEM,
-                    onClick = { viewModel.setThemeMode(SettingsPrefs.THEME_SYSTEM) }
-                )
-            }
-            item {
-                ModeOptionCard(
-                    title = stringResource(R.string.settings_theme_light),
-                    desc = stringResource(R.string.settings_theme_light_desc),
-                    selected = themeMode == SettingsPrefs.THEME_LIGHT,
-                    onClick = { viewModel.setThemeMode(SettingsPrefs.THEME_LIGHT) }
-                )
-            }
-            item {
-                ModeOptionCard(
-                    title = stringResource(R.string.settings_theme_dark),
-                    desc = stringResource(R.string.settings_theme_dark_desc),
-                    selected = themeMode == SettingsPrefs.THEME_DARK,
-                    onClick = { viewModel.setThemeMode(SettingsPrefs.THEME_DARK) }
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionTitle(stringResource(R.string.settings_theme_section))
+                    val themeValues = listOf(
+                        SettingsPrefs.THEME_SYSTEM,
+                        SettingsPrefs.THEME_LIGHT,
+                        SettingsPrefs.THEME_DARK
+                    )
+                    FloatingSegmentedControl(
+                        options = listOf(
+                            stringResource(R.string.settings_theme_system),
+                            stringResource(R.string.settings_theme_light),
+                            stringResource(R.string.settings_theme_dark)
+                        ),
+                        selectedIndex = themeValues.indexOf(themeMode),
+                        onSelect = { viewModel.setThemeMode(themeValues[it]) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
-            // ---- 语言 ----
+            // ---- 语言：悬浮分段选择器（与底部导航栏同款外观 + 切换滑动） ----
             item {
-                SectionTitle(stringResource(R.string.settings_language_section))
-            }
-            item {
-                ModeOptionCard(
-                    title = stringResource(R.string.settings_language_system),
-                    desc = stringResource(R.string.settings_language_system_desc),
-                    selected = languageMode == SettingsPrefs.LANGUAGE_SYSTEM,
-                    onClick = { viewModel.setLanguageMode(SettingsPrefs.LANGUAGE_SYSTEM) }
-                )
-            }
-            item {
-                ModeOptionCard(
-                    title = stringResource(R.string.settings_language_zh),
-                    desc = stringResource(R.string.settings_language_zh_desc),
-                    selected = languageMode == SettingsPrefs.LANGUAGE_ZH,
-                    onClick = { viewModel.setLanguageMode(SettingsPrefs.LANGUAGE_ZH) }
-                )
-            }
-            item {
-                ModeOptionCard(
-                    title = stringResource(R.string.settings_language_en),
-                    desc = stringResource(R.string.settings_language_en_desc),
-                    selected = languageMode == SettingsPrefs.LANGUAGE_EN,
-                    onClick = { viewModel.setLanguageMode(SettingsPrefs.LANGUAGE_EN) }
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionTitle(stringResource(R.string.settings_language_section))
+                    val languageValues = listOf(
+                        SettingsPrefs.LANGUAGE_SYSTEM,
+                        SettingsPrefs.LANGUAGE_ZH,
+                        SettingsPrefs.LANGUAGE_EN
+                    )
+                    FloatingSegmentedControl(
+                        options = listOf(
+                            stringResource(R.string.settings_language_system),
+                            stringResource(R.string.settings_language_zh),
+                            stringResource(R.string.settings_language_en)
+                        ),
+                        selectedIndex = languageValues.indexOf(languageMode),
+                        onSelect = { viewModel.setLanguageMode(languageValues[it]) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             // ---- AI 服务：两个用途共用一套清晰的配置界面，配置仍分别保存 ----
@@ -252,7 +252,7 @@ fun SettingsScreen(
                 SectionTitle(stringResource(R.string.settings_ai_section))
             }
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -312,7 +312,7 @@ fun SettingsScreen(
                 SectionTitle(stringResource(R.string.settings_llm_stats_section))
             }
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
                             .padding(16.dp)
@@ -363,7 +363,7 @@ fun SettingsScreen(
                 SectionTitle(stringResource(R.string.settings_data_section))
             }
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Button(onClick = { viewModel.exportData() }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
@@ -384,7 +384,7 @@ fun SettingsScreen(
                 SectionTitle(stringResource(R.string.settings_check_section))
             }
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         OutlinedButton(onClick = { viewModel.runCheckNow() }, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.settings_check_now))
@@ -404,7 +404,7 @@ fun SettingsScreen(
                 SectionTitle(stringResource(R.string.settings_about_section))
             }
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                FloatingCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(stringResource(R.string.settings_app_version), style = MaterialTheme.typography.bodyLarge)
                         Spacer(Modifier.height(6.dp))
@@ -468,46 +468,6 @@ private fun SectionTitle(title: String) {
     )
 }
 
-/** 服务模式单选项 */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ModeOptionCard(
-    title: String,
-    desc: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth(),
-        border = if (selected) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        },
-        onClick = onClick
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(selected = selected, onClick = onClick)
-            Spacer(Modifier.padding(4.dp))
-            Column {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    desc,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun providerDisplayName(provider: String): String =
     when (provider) {
@@ -544,12 +504,15 @@ private fun AiServiceTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    FloatingCard(
         onClick = onClick,
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+            }
         ),
         border = if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
     ) {
@@ -598,7 +561,7 @@ private fun ProviderSettingsFields(
     )
 
     if (provider == LlmProviders.LOCAL) {
-        Card(
+        FloatingCard(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
             ),
@@ -687,6 +650,8 @@ private fun ModelSelector(
             )
         },
         singleLine = true,
+        // 圆角与底部悬浮导航栏一致
+        shape = RoundedCornerShape(FLOATING_CORNER),
         modifier = Modifier.fillMaxWidth()
     )
     Spacer(Modifier.height(6.dp))
@@ -751,6 +716,8 @@ private fun ApiKeyField(
                 Text(stringResource(if (keyVisible) R.string.settings_key_hide else R.string.settings_key_show))
             }
         },
+        // 圆角与底部悬浮导航栏一致
+        shape = RoundedCornerShape(FLOATING_CORNER),
         modifier = Modifier.fillMaxWidth()
     )
 }

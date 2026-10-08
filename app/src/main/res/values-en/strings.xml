@@ -259,6 +259,10 @@
     <string name="qa_tools_hide">Called %1$d tool(s), hide steps</string>
     <string name="qa_input_hint">Type a health question…</string>
     <string name="qa_send_cd">Send</string>
+    <string name="qa_copy">Copy</string>
+    <string name="qa_share">Share</string>
+    <string name="qa_copy_share_title">Copy / Share</string>
+    <string name="qa_copy_share_hint">Long-press to select part of the text; the whole text is used when nothing is selected</string>
     <string name="qa_sources">Sources:\n%1$s</string>
     <string name="qa_thinking_show">Show reasoning</string>
     <string name="qa_thinking_hide">Hide reasoning</string>

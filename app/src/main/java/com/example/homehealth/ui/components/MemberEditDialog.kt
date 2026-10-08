@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.homehealth.R
 import com.example.homehealth.data.local.entity.FamilyMember
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
 import com.example.homehealth.util.DateUtils
 import java.io.File
 import java.time.Instant
@@ -166,7 +168,7 @@ fun MemberEditDialog(
         title = { Text(if (member == null) stringResource(R.string.member_add_title) else stringResource(R.string.member_edit_title)) },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
                 // 头像：点击选择照片
@@ -199,25 +201,32 @@ fun MemberEditDialog(
                     isError = nameError,
                     supportingText = { if (nameError) Text(stringResource(R.string.member_name_error)) },
                     singleLine = true,
+                    shape = RoundedCornerShape(FLOATING_CORNER),
                     modifier = Modifier.fillMaxWidth()
                 )
                 val relOptions = Relationships.CODES.map { it to relationshipLabel(it) }
-                DropdownSelector(
-                    options = relOptions.map { it.second },
-                    selected = relationshipLabel(relationship),
-                    label = stringResource(R.string.member_relationship_label),
-                    onSelect = { label -> relationship = relOptions.first { it.second == label }.first }
-                )
                 val genderOptions = GENDERS.map { it.first to genderLabel(it.first) }
-                DropdownSelector(
-                    options = genderOptions.map { it.second },
-                    selected = genderLabel(genderCode),
-                    label = stringResource(R.string.member_gender_label),
-                    onSelect = { label -> genderCode = genderOptions.first { it.second == label }.first }
-                )
+                // 关系 + 性别并排，省一行高度
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DropdownSelector(
+                        options = relOptions.map { it.second },
+                        selected = relationshipLabel(relationship),
+                        label = stringResource(R.string.member_relationship_label),
+                        onSelect = { label -> relationship = relOptions.first { it.second == label }.first },
+                        modifier = Modifier.weight(1f)
+                    )
+                    DropdownSelector(
+                        options = genderOptions.map { it.second },
+                        selected = genderLabel(genderCode),
+                        label = stringResource(R.string.member_gender_label),
+                        onSelect = { label -> genderCode = genderOptions.first { it.second == label }.first },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(
                         onClick = { showDobPicker = true },
+                        shape = RoundedCornerShape(FLOATING_CORNER),
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(if (dob.isBlank()) stringResource(R.string.member_dob_pick)
@@ -238,6 +247,7 @@ fun MemberEditDialog(
                         label = { Text(stringResource(R.string.member_height_label)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(FLOATING_CORNER),
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
@@ -246,6 +256,7 @@ fun MemberEditDialog(
                         label = { Text(stringResource(R.string.member_weight_label)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(FLOATING_CORNER),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -257,32 +268,42 @@ fun MemberEditDialog(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-                NullableDropdown(
-                    label = stringResource(R.string.member_blood_type),
-                    kind = ProfileKind.BLOOD_TYPE,
-                    value = bloodType,
-                    onSelect = { bloodType = it }
-                )
-                OutlinedTextField(
-                    value = waist,
-                    onValueChange = { waist = filterNumber(it) },
-                    label = { Text(stringResource(R.string.member_waist_label)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                NullableDropdown(
-                    label = stringResource(R.string.member_exercise_label),
-                    kind = ProfileKind.EXERCISE,
-                    value = exercise,
-                    onSelect = { exercise = it }
-                )
-                NullableDropdown(
-                    label = stringResource(R.string.member_diet_label),
-                    kind = ProfileKind.DIET,
-                    value = diet,
-                    onSelect = { diet = it }
-                )
+                // 血型 + 腰围并排
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    NullableDropdown(
+                        label = stringResource(R.string.member_blood_type),
+                        kind = ProfileKind.BLOOD_TYPE,
+                        value = bloodType,
+                        onSelect = { bloodType = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = waist,
+                        onValueChange = { waist = filterNumber(it) },
+                        label = { Text(stringResource(R.string.member_waist_label)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(FLOATING_CORNER),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // 运动 + 饮食并排
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    NullableDropdown(
+                        label = stringResource(R.string.member_exercise_label),
+                        kind = ProfileKind.EXERCISE,
+                        value = exercise,
+                        onSelect = { exercise = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    NullableDropdown(
+                        label = stringResource(R.string.member_diet_label),
+                        kind = ProfileKind.DIET,
+                        value = diet,
+                        onSelect = { diet = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     NullableDropdown(
                         label = stringResource(R.string.member_smoking_label),
@@ -305,6 +326,7 @@ fun MemberEditDialog(
                     label = { Text(stringResource(R.string.member_chronic_label)) },
                     supportingText = { Text(stringResource(R.string.member_chronic_hint)) },
                     singleLine = true,
+                    shape = RoundedCornerShape(FLOATING_CORNER),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -313,6 +335,7 @@ fun MemberEditDialog(
                     label = { Text(stringResource(R.string.member_surgery_label)) },
                     supportingText = { Text(stringResource(R.string.member_surgery_hint)) },
                     singleLine = true,
+                    shape = RoundedCornerShape(FLOATING_CORNER),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -456,13 +479,17 @@ fun <T> DropdownSelector(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            // 圆角与底部悬浮导航栏一致
+            shape = RoundedCornerShape(FLOATING_CORNER),
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            // 弹窗圆角与底部悬浮导航栏一致
+            shape = RoundedCornerShape(FLOATING_CORNER)
         ) {
             Column(
                 modifier = Modifier

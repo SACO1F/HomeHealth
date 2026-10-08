@@ -1,23 +1,30 @@
 package com.example.homehealth.ui.screens.qa
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -25,22 +32,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,9 +59,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,8 +77,10 @@ import com.example.homehealth.R
 import com.example.homehealth.data.local.entity.QAHistory
 import com.example.homehealth.ui.components.MarkdownText
 import com.example.homehealth.ui.components.memberPickerLabel
+import com.example.homehealth.ui.navigation.FLOATING_CORNER
 import com.example.homehealth.ui.navigation.FLOATING_NAV_RESERVE
 import com.example.homehealth.util.DateUtils
+import com.example.homehealth.ui.components.AppleIconButton
 import java.io.File
 
 /** 健康问答页：聊天式界面，基于成员健康数据回答 */
@@ -109,7 +126,19 @@ fun QAScreen(
             androidx.compose.material3.TopAppBar(title = { Text(stringResource(R.string.qa_title)) })
         }
     ) { padding ->
-        Column(
+        // 输入栏的底部避让。**必须用键盘 inset 的动画值连续计算，而不是用「键盘是否可见」的布尔开关**：
+        // 开关只会在动画结束时翻转，于是收起键盘时输入栏先随 imePadding 落到底部、再瞬间跳回
+        // 导航栏上方（用户看到的「先掉下去再弹上来」）。用 (预留 - 键盘高度) 截断到 0，
+        // 输入栏的绝对位置 = max(键盘高度, 预留)，全程连续。
+        val density = LocalDensity.current
+        val imeBottom = with(density) { WindowInsets.ime.getBottom(density).toDp() }
+        // NavHost 层不再统一补导航栏 inset（否则底部会留出背景条），这里把系统导航栏高度并进避让
+        val navBottom = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
+        val barBottom = (FLOATING_NAV_RESERVE + navBottom - imeBottom).coerceAtLeast(0.dp)
+
+        // 全屏消息层 + 底部悬浮层：消息列表铺满整页、从悬浮输入栏与底部导航栏下方穿过；
+        // 输入栏（含错误提示、待发附图）浮在消息之上，透明度与底部导航栏保持一致。
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -118,183 +147,224 @@ fun QAScreen(
                 .consumeWindowInsets(padding)
                 .imePadding()
         ) {
-            // 成员选择 + 提示
-            if (state.members.isNotEmpty()) {
-                val memberOptions = state.members.map { it to memberPickerLabel(it.name, it.relationship) }
-                com.example.homehealth.ui.components.DropdownSelector(
-                    options = memberOptions.map { it.second },
-                    selected = memberOptions
-                        .firstOrNull { it.first.id == state.selectedMemberId }
-                        ?.second ?: "",
-                    label = stringResource(R.string.qa_member_label),
-                    onSelect = { label ->
-                        memberOptions.firstOrNull { it.second == label }
-                            ?.let { viewModel.selectMember(it.first.id) }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-                Text(
-                    stringResource(R.string.qa_disclaimer),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-            }
-
-            // 消息列表
-            Box(modifier = Modifier.weight(1f)) {
-                if (state.history.isEmpty() && !state.loading) {
-                    Text(
-                        if (state.members.isEmpty()) stringResource(R.string.qa_empty_members)
-                        else stringResource(R.string.qa_try_ask),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Column(modifier = Modifier.fillMaxSize()) {
+                // 成员选择 + 提示
+                if (state.members.isNotEmpty()) {
+                    val memberOptions = state.members.map { it to memberPickerLabel(it.name, it.relationship) }
+                    com.example.homehealth.ui.components.DropdownSelector(
+                        options = memberOptions.map { it.second },
+                        selected = memberOptions
+                            .firstOrNull { it.first.id == state.selectedMemberId }
+                            ?.second ?: "",
+                        label = stringResource(R.string.qa_member_label),
+                        onSelect = { label ->
+                            memberOptions.firstOrNull { it.second == label }
+                                ?.let { viewModel.selectMember(it.first.id) }
+                        },
                         modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(32.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    Text(
+                        stringResource(R.string.qa_disclaimer),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(state.history, key = { it.id }) { item ->
-                        ChatBubble(item)
+
+                // 消息列表：占满剩余空间（一直延伸到页面底部），底部留白避开悬浮输入栏
+                Box(modifier = Modifier.weight(1f)) {
+                    if (state.history.isEmpty() && !state.loading) {
+                        Text(
+                            if (state.members.isEmpty()) stringResource(R.string.qa_empty_members)
+                            else stringResource(R.string.qa_try_ask),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(32.dp)
+                        )
                     }
-                    // 已发送待回答的问题：立即上屏，无需等待 LLM 返回
-                    state.pendingQuestion?.let { q ->
-                        item {
-                            PendingQuestionBubble(q, state.streamingImagePath)
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 16.dp, end = 16.dp, top = 8.dp,
+                            // 底部留白 = 输入栏 +（键盘收起时）导航栏避让 +（有附图时）附图行，
+                            // 使最后一条消息能滚到悬浮输入栏之上，不被永久遮挡
+                            bottom = barBottom +
+                                INPUT_BAR_CLEARANCE +
+                                (if (state.pendingImagePath != null) PENDING_IMAGE_CLEARANCE else 0.dp)
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(state.history, key = { it.id }) { item ->
+                            ChatBubble(item)
                         }
-                    }
-                    if (state.loading) {
-                        item {
-                            // 依据先到（本地检索），所以通常一闪就进流式气泡；只有检索阶段才显示纯加载态
-                            if (state.hasStreaming) {
-                                StreamingAnswerBubble(
-                                    answer = state.streamingAnswer,
-                                    thinking = state.streamingThinking,
-                                    references = state.streamingReferences,
-                                    tools = state.streamingTools
-                                )
-                            } else {
-                                AnalyzingBubble()
+                        // 已发送待回答的问题：立即上屏，无需等待 LLM 返回
+                        state.pendingQuestion?.let { q ->
+                            item {
+                                PendingQuestionBubble(q, state.streamingImagePath)
+                            }
+                        }
+                        if (state.loading) {
+                            item {
+                                // 依据先到（本地检索），所以通常一闪就进流式气泡；只有检索阶段才显示纯加载态
+                                if (state.hasStreaming) {
+                                    StreamingAnswerBubble(
+                                        answer = state.streamingAnswer,
+                                        thinking = state.streamingThinking,
+                                        references = state.streamingReferences,
+                                        tools = state.streamingTools
+                                    )
+                                } else {
+                                    AnalyzingBubble()
+                                }
                             }
                         }
                     }
                 }
             }
 
-            state.error?.let { msg ->
-                Text(
-                    msg,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-
-            // 待发送的附图：先给缩略图让用户确认，再连同问题一起发出
-            state.pendingImagePath?.let { path ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AsyncImage(
-                        model = File(path),
-                        contentDescription = stringResource(R.string.qa_image_cd),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    )
+            // ---- 底部悬浮层：错误 / 待发附图 / 输入栏 ----
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+            ) {
+                state.error?.let { msg ->
                     Text(
-                        stringResource(R.string.qa_image_cd),
+                        msg,
+                        color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 10.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
-                    IconButton(onClick = { viewModel.removeAttachment() }) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.qa_remove_image_cd),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
+                }
+
+                // 待发送的附图：先给缩略图让用户确认，再连同问题一起发出
+                state.pendingImagePath?.let { path ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = File(path),
+                            contentDescription = stringResource(R.string.qa_image_cd),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(8.dp))
                         )
+                        Text(
+                            stringResource(R.string.qa_image_cd),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 10.dp)
+                        )
+                        AppleIconButton(onClick = { viewModel.removeAttachment() }) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.qa_remove_image_cd),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
-            }
 
-            // 输入栏（紧凑：48dp 高 + 14sp 文字；imePadding 使其始终位于输入法之上）。
-            // 悬浮底部导航栏不再预留 Scaffold 空间：键盘收起时输入栏需主动避让
-            // （键盘弹出时导航栏隐藏，避让随之取消，输入栏贴平键盘上沿）
-            val imeOpen = WindowInsets.isImeVisible
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .padding(bottom = if (imeOpen) 0.dp else FLOATING_NAV_RESERVE),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = {
-                        pickImageLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                    enabled = !state.loading
-                ) {
-                    Icon(
-                        Icons.Filled.Image,
-                        contentDescription = stringResource(R.string.qa_attach_cd),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    placeholder = {
-                        Text(stringResource(R.string.qa_input_hint), style = MaterialTheme.typography.bodyMedium)
-                    },
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    maxLines = 3,
+                // 悬浮输入栏：与底部导航栏同款的胶囊 + 阴影，浮于消息之上。
+                // 左右各留 28dp（导航栏是 20dp），因此略窄于导航栏；底色透明度与导航栏一致（0.92）。
+                // 高度刻意压扁：图标按钮 36dp + 极简内边距，避免输入栏过于厚重。
+                Surface(
+                    shape = RoundedCornerShape(FLOATING_CORNER),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    shadowElevation = 12.dp,
                     modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                )
-                IconButton(
-                    onClick = {
-                        // 发起成功才清空输入；未发起（无成员/加载中）时保留文字
-                        if (viewModel.ask(input)) {
-                            input = ""
-                            // 收起输入法，输入框随 imePadding 释放自动下沉到底部
-                            keyboardController?.hide()
-                        }
-                    },
-                    // 只发图不提问也是合法操作：图里往往就是要问的东西
-                    enabled = (input.isNotBlank() || state.pendingImagePath != null) &&
-                        !state.loading && state.members.isNotEmpty()
+                        .fillMaxWidth()
+                        .padding(horizontal = 28.dp, vertical = 4.dp)
+                        .padding(bottom = barBottom)
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = stringResource(R.string.qa_send_cd),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppleIconButton(
+                            onClick = {
+                                pickImageLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            enabled = !state.loading,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Image,
+                                contentDescription = stringResource(R.string.qa_attach_cd),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                        BasicTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            maxLines = 3,
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            // 极简占位：不用 TextField 自带的高内边距，整栏才压得下来
+                            decorationBox = { inner ->
+                                Box(contentAlignment = Alignment.CenterStart) {
+                                    if (input.isEmpty()) {
+                                        Text(
+                                            stringResource(R.string.qa_input_hint),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    inner()
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp, vertical = 8.dp)
+                        )
+                        AppleIconButton(
+                            onClick = {
+                                // 发起成功才清空输入；未发起（无成员/加载中）时保留文字
+                                if (viewModel.ask(input)) {
+                                    input = ""
+                                    // 收起输入法，输入栏随 imePadding 释放自动下沉到底部
+                                    keyboardController?.hide()
+                                }
+                            },
+                            // 只发图不提问也是合法操作：图里往往就是要问的东西
+                            enabled = (input.isNotBlank() || state.pendingImagePath != null) &&
+                                !state.loading && state.members.isNotEmpty(),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = stringResource(R.string.qa_send_cd),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+/** 悬浮输入栏（含上下外边距）在列表底部需要让出的高度，使最后一条消息能滚到栏上方 */
+private val INPUT_BAR_CLEARANCE = 56.dp
+
+/** 待发送附图行额外占用的高度 */
+private val PENDING_IMAGE_CLEARANCE = 64.dp
 
 /** 纯加载态：只在检索尚未产出依据、或首个增量还没到达时短暂出现 */
 @Composable
@@ -440,70 +510,161 @@ private fun AttachedImage(path: String) {
     )
 }
 
+/**
+ * 长按气泡 → 打开「复制 / 转发」对话框：文本可自由选中，
+ * 复制 / 转发作用于**选中部分**（未选中时作用于全文）。
+ *
+ * 为什么放进对话框而不是直接让气泡文字可选中：气泡里的「思考过程 / 工具轨迹」本身带
+ * 「点击展开」手势，直接在气泡里启用选中会与它冲突；放进对话框既避开冲突，
+ * 又能让用户精确选择要复制 / 转发的那一段。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BubbleActions(
+    text: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    Box(
+        modifier = modifier.combinedClickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onLongClick = { open = true },
+            onClick = {}
+        )
+    ) {
+        content()
+    }
+    if (open) {
+        CopyShareDialog(fullText = text, onDismiss = { open = false })
+    }
+}
+
+/** 「复制 / 转发」对话框：文本可选中，操作作用于选中部分（未选中则作用于全文） */
+@Composable
+private fun CopyShareDialog(fullText: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    var field by remember { mutableStateOf(TextFieldValue(fullText)) }
+    // 有选中就只处理选中的那段，否则整条文本
+    val selection = field.selection.takeIf { !it.collapsed }
+    val payload = selection?.let { field.text.substring(it.min, it.max) }
+        ?.takeIf { it.isNotBlank() } ?: fullText
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.qa_copy_share_title)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.qa_copy_share_hint),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                BasicTextField(
+                    value = field,
+                    onValueChange = { field = it },
+                    // 只读但可选中：拖动手柄选择要复制 / 转发的片段
+                    readOnly = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .padding(10.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(payload))
+                onDismiss()
+            }) { Text(stringResource(R.string.qa_copy)) }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                onDismiss()
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, payload)
+                }
+                runCatching { context.startActivity(Intent.createChooser(send, null)) }
+            }) { Text(stringResource(R.string.qa_share)) }
+        }
+    )
+}
+
 @Composable
 private fun ChatBubble(item: QAHistory) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.End
     ) {
-        // 用户问题（可带附图，也可只发图）
-        Surface(
-            shape = RoundedCornerShape(
-                topStart = 16.dp, topEnd = 4.dp,
-                bottomStart = 16.dp, bottomEnd = 16.dp
-            ),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.widthIn(max = 300.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                if (!item.imagePath.isNullOrBlank()) {
-                    AttachedImage(path = item.imagePath!!)
-                    if (item.question.isNotBlank()) Spacer8()
-                }
-                if (item.question.isNotBlank()) {
-                    Text(
-                        text = item.question,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+        // 用户问题（可带附图，也可只发图）——长按可复制 / 转发
+        BubbleActions(text = item.question) {
+            Surface(
+                shape = RoundedCornerShape(
+                    topStart = 16.dp, topEnd = 4.dp,
+                    bottomStart = 16.dp, bottomEnd = 16.dp
+                ),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.widthIn(max = 300.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    if (!item.imagePath.isNullOrBlank()) {
+                        AttachedImage(path = item.imagePath!!)
+                        if (item.question.isNotBlank()) Spacer8()
+                    }
+                    if (item.question.isNotBlank()) {
+                        Text(
+                            text = item.question,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
         }
 
         Spacer8()
 
-        // 助手回答
-        Surface(
-            shape = RoundedCornerShape(
-                topStart = 4.dp, topEnd = 16.dp,
-                bottomStart = 16.dp, bottomEnd = 16.dp
-            ),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .align(Alignment.Start)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                // 思考过程（深度思考模型返回，默认收起，点击展开）
-                if (!item.thinking.isNullOrBlank()) {
-                    ThinkingBlock(thinking = item.thinking!!)
-                }
-                // Markdown 渲染：LLM 回答的标题/列表/粗体/代码不再以裸符号显示
-                MarkdownText(markdown = item.answer)
-                if (!item.sources.isNullOrBlank()) {
+        // 助手回答——长按可复制 / 转发
+        BubbleActions(text = item.answer, modifier = Modifier.align(Alignment.Start)) {
+            Surface(
+                shape = RoundedCornerShape(
+                    topStart = 4.dp, topEnd = 16.dp,
+                    bottomStart = 16.dp, bottomEnd = 16.dp
+                ),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.widthIn(max = 320.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    // 思考过程（深度思考模型返回，默认收起，点击展开）
+                    if (!item.thinking.isNullOrBlank()) {
+                        ThinkingBlock(thinking = item.thinking!!)
+                    }
+                    // Markdown 渲染：LLM 回答的标题/列表/粗体/代码不再以裸符号显示
+                    MarkdownText(markdown = item.answer)
+                    if (!item.sources.isNullOrBlank()) {
+                        Text(
+                            text = stringResource(R.string.qa_sources, item.sources),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                     Text(
-                        text = stringResource(R.string.qa_sources, item.sources),
+                        text = DateUtils.formatDateTime(item.timestamp),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
-                Text(
-                    text = DateUtils.formatDateTime(item.timestamp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
             }
         }
     }
