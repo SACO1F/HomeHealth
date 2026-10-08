@@ -93,9 +93,9 @@ class QARepositoryImpl @Inject constructor(
 
         // 快路径的「数据依据」：检索命中给记录明细，泛化问题给数据范围（两条都不留空）
         val searchReferences = if (hits.isEmpty()) {
-            buildSummaryReferences(member, recordsByType)
+            QaReferences.summary(member, recordsByType)
         } else {
-            buildRetrievedReferences(member, hits)
+            QaReferences.retrieved(member, hits)
         }
 
         // 附图：压缩成 base64 交给视觉模型。压缩放在数据层而不是界面层 ——
@@ -114,17 +114,25 @@ class QARepositoryImpl @Inject constructor(
         val llmReady = LlmProviders.isDirect(settingsPrefs.qaProvider) && llmClient.qaConfigured()
 
         // 个人健康档案（血型 / 生活方式 / 慢性病史 / 手术史，用户自述）同样是一份可用上下文：
-        // 即便该成员还没有任何记录，只要档案非空就值得让模型结合它作答
+        // 即便该成员还没有任何记录、也没附图，只要档案非空就值得让模型结合它作答
         // （如「我这种饮食习惯要注意什么」）—— 否则会落到离线引擎、档案被完全忽略。
-        val profileText = member.profileSummary()
-        val hasProfile = profileText.isNotBlank()
-        val hasData = recordsByType.isNotEmpty() || imageBase64 != null || hasProfile
+        val hasData = hasQaContext(
+            member = member,
+            recordCount = recordsByType.values.sumOf { it.size },
+            hasImage = imageBase64 != null
+        )
 
         // 路由：命中强指标词 → 快路径；没有可靠指标词（泛化 / 需要多步交叉验证）→ Agent 路径。
         // 快路径**刻意保留**：对"指向具体指标"的问题，Agent 只会把 1 次请求变成 2~5 次而质量不变
         // —— 用 Agent 替换整条链路是负优化，这是本设计里最要紧的一条判断。
         // 记录、附图、个人档案三者都没有时才交给本地引擎：那种情况下一句"请先录入"就够了。
-        val useAgent = strongTerms.isEmpty() && !noVision && llmReady && hasData
+        // 决策抽成纯函数 routeQa 以便单测覆盖（见 QaRouting.kt）。
+        val route = routeQa(
+            hasStrongTerms = strongTerms.isNotEmpty(),
+            noVision = noVision,
+            llmReady = llmReady,
+            hasData = hasData
+        )
 
         val answerText = StringBuilder()
         val thinkingText = StringBuilder()
@@ -133,8 +141,8 @@ class QARepositoryImpl @Inject constructor(
         var truncated = false
         val sources: List<String>
 
-        when {
-            noVision -> {
+        when (route) {
+            QaRoute.NO_VISION -> {
                 // 有图但没有可用的视觉模型：明确告知，而不是把图片丢掉、让用户以为模型看过图
                 if (references.isNotBlank()) emit(QaStreamEvent.References(references))
                 answerText.append(NO_VISION_MESSAGE)
@@ -142,7 +150,7 @@ class QARepositoryImpl @Inject constructor(
                 sources = listOf("未发送图片：当前配置没有可用的视觉模型")
             }
 
-            useAgent -> {
+            QaRoute.AGENT -> {
                 // ---- Agent 路径：依据要等工具跑完才知道，因此这里先置空 ----
                 references = ""
                 var evidence: List<String> = emptyList()
@@ -194,7 +202,7 @@ class QARepositoryImpl @Inject constructor(
                     sources = src + AGENT_FALLBACK_NOTE
                 } else {
                     // 依据直接复用工具返回的明细原文，与模型看到的内容逐字一致
-                    references = buildAgentReferences(evidence, member)
+                    references = QaReferences.agent(evidence, member)
                     if (references.isNotBlank()) emit(QaStreamEvent.References(references))
                     if (truncated) {
                         answerText.append("\n\n").append(TRUNCATED_NOTICE)
@@ -210,7 +218,7 @@ class QARepositoryImpl @Inject constructor(
             }
 
             // ---- 快路径：与 Agent 上线前完全一致（回归基准）----
-            llmReady && hasData -> {
+            QaRoute.FAST -> {
                 if (references.isNotBlank()) emit(QaStreamEvent.References(references))
                 try {
                     llmClient.askHealthQuestionStream(
@@ -275,7 +283,7 @@ class QARepositoryImpl @Inject constructor(
                 }
             }
 
-            else -> {
+            QaRoute.OFFLINE -> {
                 // 本地模式 / 未配置 Key / 该成员还没有记录：离线规则引擎
                 if (references.isNotBlank()) emit(QaStreamEvent.References(references))
                 val (text, src) = localQaEngine.answer(member.name, recordsByType, question)
@@ -416,7 +424,7 @@ class QARepositoryImpl @Inject constructor(
     /**
      * A1 真实检索路径：把 BM25 召回的 Top-K 记录整理为带引用编号（[n]）的上下文。
      * 与 [buildRecordsSummary] 的差异：只包含与问题相关的记录，且每条都有稳定编号，
-     * 模型可以在回答里引用编号，答案末尾的引用明细（[buildRetrievedReferences]）与之对应。
+     * 模型可以在回答里引用编号，答案末尾的引用明细（[QaReferences.retrieved]）与之对应。
      */
     private fun buildRetrievedSummary(
         member: FamilyMember,
@@ -461,106 +469,6 @@ class QARepositoryImpl @Inject constructor(
         val metrics = recordsByType.keys.sortedBy { HealthTypes.label(it) }
             .joinToString("、") { "${HealthTypes.label(it)}(${recordsByType.getValue(it).size})" }
         return "$total 条记录，覆盖指标：$metrics"
-    }
-
-    /**
-     * 「数据依据」——检索路径：列出 BM25 召回的 Top-K 记录，编号与上下文里的 `[n]` 一一对应。
-     * 带参考范围与偏高/偏低标注，用户可以直接拿它核对模型引用的每一个数字。
-     */
-    private fun buildRetrievedReferences(member: FamilyMember, hits: List<QaRetriever.Scored>): String =
-        buildString {
-            appendLine()
-            appendLine("———")
-            appendLine("📎 数据依据（按相关度从已保存记录中检索出 ${hits.size} 条，编号与上文 [n] 对应）：")
-            appendProfile(member.profileSummary())
-            for (hit in hits) {
-                val r = hit.record
-                val unitText = r.unit.trim().ifBlank { HealthTypes.unit(r.type) }
-                append("[${hit.rank}] ${HealthTypes.label(r.type)} · ${DateUtils.formatDate(r.recordDate)} · ${r.value}")
-                if (unitText.isNotBlank()) append(" $unitText")
-                HealthTypes.def(r.type)?.rangeFor(member.gender)?.let { append("（参考 ${it.text}）") }
-                append(rangeFlag(r, member))
-                appendLine()
-            }
-        }
-
-    /**
-     * 「数据依据」——全量摘要路径：泛化问题（"整体健康状况怎么样"）无法只依据少数记录回答，
-     * 逐条列出几十项明细只会稀释重点，因此改为把**数据范围**说清楚：多少条记录、覆盖哪些指标。
-     */
-    private fun buildSummaryReferences(
-        member: FamilyMember,
-        recordsByType: Map<String, List<HealthRecord>>
-    ): String = buildString {
-        val total = recordsByType.values.sumOf { it.size }
-        val profile = member.profileSummary()
-        // 有档案也算「有依据」：成员还没录任何记录时，档案就是这次回答的全部上下文
-        if (total == 0 && profile.isBlank()) return@buildString
-        appendLine()
-        appendLine("———")
-        appendLine("📎 数据依据（该问题未指向具体指标，按全部已保存记录汇总）：")
-        appendProfile(profile)
-        if (total > 0) {
-            appendLine("　成员：${member.name} ｜ 记录 $total 条 ｜ 覆盖 ${recordsByType.size} 项指标")
-            append("　参与分析的指标：")
-            appendLine(
-                recordsByType.keys.sortedBy { HealthTypes.label(it) }
-                    .joinToString("、") { "${HealthTypes.label(it)}×${recordsByType.getValue(it).size}" }
-            )
-        } else {
-            appendLine("　成员：${member.name} ｜ 暂无健康记录，本次仅依据个人健康档案")
-        }
-    }
-
-    /**
-     * 「数据依据」——Agent 路径：直接复用检索类工具返回的明细原文。
-     *
-     * 为什么不重新组织一遍：**模型看到的就是这段文本**，逐字复用才能保证
-     * "答案里引用的数字"与"依据里列出的数字"完全对得上；另起一条数据通路
-     * 很容易出现两边口径不一致，而用户是拿依据去核对答案的。
-     */
-    private fun buildAgentReferences(evidence: List<String>, member: FamilyMember): String {
-        val blocks = evidence.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-        val profile = member.profileSummary()
-        if (blocks.isEmpty() && profile.isBlank()) return ""
-        return buildString {
-            appendLine()
-            appendLine("———")
-            appendLine("📎 数据依据（Agent 通过工具获取，共 ${blocks.size} 段）：")
-            appendProfile(profile)
-            blocks.forEach { block ->
-                block.lineSequence().forEach { line -> appendLine("　$line") }
-            }
-        }
-    }
-
-    /**
-     * 记录相对参考范围的高/低标注。
-     *
-     * 单位与字典预设不一致时**不下结论**（如维生素 D 记录是 nmol/L、参考范围按 ng/mL 标注），
-     * 跨单位比较必然误判 —— 与 [buildRecordsSummary] 的口径保持一致。
-     */
-    private fun rangeFlag(record: HealthRecord, member: FamilyMember): String {
-        val value = record.numericValue ?: return ""
-        val actual = record.unit.trim().takeIf { it.isNotBlank() }
-        val preset = HealthTypes.unit(record.type)
-        if (actual != null && preset.isNotBlank() && actual != preset) return ""
-        val ref = HealthTypes.def(record.type)?.rangeFor(member.gender) ?: return ""
-        return when {
-            ref.high != null && value > ref.high -> " ↑偏高"
-            ref.low != null && value < ref.low -> " ↓偏低"
-            else -> ""
-        }
-    }
-
-    /**
-     * 把个人健康档案追加进「数据依据」块。
-     * 档案是用户自述的静态背景，既然参与了解读，就应当让用户看得见 —— 与指标记录并列展示。
-     */
-    private fun StringBuilder.appendProfile(profile: String) {
-        if (profile.isBlank()) return
-        appendLine("　【个人健康档案】（用户自述，静态背景）：")
-        profile.lineSequence().forEach { line -> appendLine("　　$line") }
     }
 
     /** 折行追加，并返回是否成功（超预算返回 false） */
