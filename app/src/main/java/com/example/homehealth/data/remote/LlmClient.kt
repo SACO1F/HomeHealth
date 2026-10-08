@@ -708,6 +708,11 @@ class LlmClient @Inject constructor(
                 if (hasImage) "只依据记录与图片中的内容回答，不要编造不存在的数值"
                 else "只依据记录中的数据分析，不要编造不存在的数值"
             )
+            add(
+                "上下文里可能带有「个人健康档案」（血型 / 生活方式 / 慢性病史 / 手术史，用户自述的静态背景）：" +
+                    "解读数值、给建议时应结合它（如结合饮食习惯、慢性病史判断风险）；" +
+                    "它不是本次测量的数据，也不要编造档案里没有的内容"
+            )
             add("回答简洁实用，涉及趋势时做简单分析，涉及参考范围的解释要通俗")
             add("涉及疾病诊断、用药调整时，提醒用户咨询医生")
             if (requireCitation) {
@@ -716,7 +721,7 @@ class LlmClient @Inject constructor(
             add("回答末尾固定附上：「以上内容由 AI 基于已保存记录生成，仅供参考，不构成医疗建议。」")
         }
         return buildString {
-            appendLine("你是「家庭健康管家」应用的健康问答助手。请基于提供的家庭成员健康记录回答问题。")
+            appendLine("你是「家庭健康管家」应用的健康问答助手。请基于提供的家庭成员健康记录与个人健康档案回答问题。")
             appendLine("规则：")
             rules.forEachIndexed { index, rule -> appendLine("${index + 1}. $rule") }
         }.trimEnd()

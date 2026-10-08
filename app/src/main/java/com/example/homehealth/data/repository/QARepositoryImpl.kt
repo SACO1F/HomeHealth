@@ -113,12 +113,18 @@ class QARepositoryImpl @Inject constructor(
 
         val llmReady = LlmProviders.isDirect(settingsPrefs.qaProvider) && llmClient.qaConfigured()
 
+        // 个人健康档案（血型 / 生活方式 / 慢性病史 / 手术史，用户自述）同样是一份可用上下文：
+        // 即便该成员还没有任何记录，只要档案非空就值得让模型结合它作答
+        // （如「我这种饮食习惯要注意什么」）—— 否则会落到离线引擎、档案被完全忽略。
+        val profileText = member.profileSummary()
+        val hasProfile = profileText.isNotBlank()
+        val hasData = recordsByType.isNotEmpty() || imageBase64 != null || hasProfile
+
         // 路由：命中强指标词 → 快路径；没有可靠指标词（泛化 / 需要多步交叉验证）→ Agent 路径。
         // 快路径**刻意保留**：对"指向具体指标"的问题，Agent 只会把 1 次请求变成 2~5 次而质量不变
         // —— 用 Agent 替换整条链路是负优化，这是本设计里最要紧的一条判断。
-        // 另外没有记录也没有附图时不走 Agent：本地引擎一句"请先录入"就够了，不必花几轮请求。
-        val useAgent = strongTerms.isEmpty() && !noVision && llmReady &&
-            (recordsByType.isNotEmpty() || imageBase64 != null)
+        // 记录、附图、个人档案三者都没有时才交给本地引擎：那种情况下一句"请先录入"就够了。
+        val useAgent = strongTerms.isEmpty() && !noVision && llmReady && hasData
 
         val answerText = StringBuilder()
         val thinkingText = StringBuilder()
@@ -188,7 +194,7 @@ class QARepositoryImpl @Inject constructor(
                     sources = src + AGENT_FALLBACK_NOTE
                 } else {
                     // 依据直接复用工具返回的明细原文，与模型看到的内容逐字一致
-                    references = buildAgentReferences(evidence)
+                    references = buildAgentReferences(evidence, member)
                     if (references.isNotBlank()) emit(QaStreamEvent.References(references))
                     if (truncated) {
                         answerText.append("\n\n").append(TRUNCATED_NOTICE)
@@ -204,7 +210,7 @@ class QARepositoryImpl @Inject constructor(
             }
 
             // ---- 快路径：与 Agent 上线前完全一致（回归基准）----
-            llmReady && (recordsByType.isNotEmpty() || imageBase64 != null) -> {
+            llmReady && hasData -> {
                 if (references.isNotBlank()) emit(QaStreamEvent.References(references))
                 try {
                     llmClient.askHealthQuestionStream(
@@ -466,6 +472,7 @@ class QARepositoryImpl @Inject constructor(
             appendLine()
             appendLine("———")
             appendLine("📎 数据依据（按相关度从已保存记录中检索出 ${hits.size} 条，编号与上文 [n] 对应）：")
+            appendProfile(member.profileSummary())
             for (hit in hits) {
                 val r = hit.record
                 val unitText = r.unit.trim().ifBlank { HealthTypes.unit(r.type) }
@@ -486,16 +493,23 @@ class QARepositoryImpl @Inject constructor(
         recordsByType: Map<String, List<HealthRecord>>
     ): String = buildString {
         val total = recordsByType.values.sumOf { it.size }
-        if (total == 0) return@buildString
+        val profile = member.profileSummary()
+        // 有档案也算「有依据」：成员还没录任何记录时，档案就是这次回答的全部上下文
+        if (total == 0 && profile.isBlank()) return@buildString
         appendLine()
         appendLine("———")
         appendLine("📎 数据依据（该问题未指向具体指标，按全部已保存记录汇总）：")
-        appendLine("　成员：${member.name} ｜ 记录 $total 条 ｜ 覆盖 ${recordsByType.size} 项指标")
-        append("　参与分析的指标：")
-        appendLine(
-            recordsByType.keys.sortedBy { HealthTypes.label(it) }
-                .joinToString("、") { "${HealthTypes.label(it)}×${recordsByType.getValue(it).size}" }
-        )
+        appendProfile(profile)
+        if (total > 0) {
+            appendLine("　成员：${member.name} ｜ 记录 $total 条 ｜ 覆盖 ${recordsByType.size} 项指标")
+            append("　参与分析的指标：")
+            appendLine(
+                recordsByType.keys.sortedBy { HealthTypes.label(it) }
+                    .joinToString("、") { "${HealthTypes.label(it)}×${recordsByType.getValue(it).size}" }
+            )
+        } else {
+            appendLine("　成员：${member.name} ｜ 暂无健康记录，本次仅依据个人健康档案")
+        }
     }
 
     /**
@@ -505,13 +519,15 @@ class QARepositoryImpl @Inject constructor(
      * "答案里引用的数字"与"依据里列出的数字"完全对得上；另起一条数据通路
      * 很容易出现两边口径不一致，而用户是拿依据去核对答案的。
      */
-    private fun buildAgentReferences(evidence: List<String>): String {
+    private fun buildAgentReferences(evidence: List<String>, member: FamilyMember): String {
         val blocks = evidence.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-        if (blocks.isEmpty()) return ""
+        val profile = member.profileSummary()
+        if (blocks.isEmpty() && profile.isBlank()) return ""
         return buildString {
             appendLine()
             appendLine("———")
             appendLine("📎 数据依据（Agent 通过工具获取，共 ${blocks.size} 段）：")
+            appendProfile(profile)
             blocks.forEach { block ->
                 block.lineSequence().forEach { line -> appendLine("　$line") }
             }
@@ -535,6 +551,16 @@ class QARepositoryImpl @Inject constructor(
             ref.low != null && value < ref.low -> " ↓偏低"
             else -> ""
         }
+    }
+
+    /**
+     * 把个人健康档案追加进「数据依据」块。
+     * 档案是用户自述的静态背景，既然参与了解读，就应当让用户看得见 —— 与指标记录并列展示。
+     */
+    private fun StringBuilder.appendProfile(profile: String) {
+        if (profile.isBlank()) return
+        appendLine("　【个人健康档案】（用户自述，静态背景）：")
+        profile.lineSequence().forEach { line -> appendLine("　　$line") }
     }
 
     /** 折行追加，并返回是否成功（超预算返回 false） */
